@@ -75,7 +75,7 @@ const char* HTML = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Seán McArdle's Droid</title>
+  <title>R2-BK00 - Seán McArdle</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; touch-action: manipulation; }
@@ -87,7 +87,8 @@ const char* HTML = R"rawliteral(
       flex-direction: column;
       padding: 10px;
     }
-    h1 { text-align: center; font-size: 1.5em; margin-bottom: 5px; }
+    h1 { text-align: center; font-size: 1.8em; margin-bottom: 2px; }
+    .owner { text-align: center; font-size: 1em; color: #3a8dde; margin-bottom: 5px; }
     .status { text-align: center; font-size: 0.8em; color: #666; margin-bottom: 10px; }
     .status.connected { color: #0c0; }
     
@@ -142,21 +143,33 @@ const char* HTML = R"rawliteral(
     }
     
     .log {
-      height: 50px;
+      height: 180px;
       background: #0a1220;
       border: 1px solid #1e3a5f;
       border-radius: 5px;
-      padding: 5px;
+      padding: 10px;
       font-family: monospace;
-      font-size: 0.65em;
+      font-size: 1.1em;
       overflow-y: auto;
-      color: #666;
+      color: #0c0;
       margin-top: 10px;
+      line-height: 1.4;
     }
+    .log .cmd { color: #ff6b35; }
+    .log .info { color: #3a8dde; }
+    .footer {
+      text-align: center;
+      font-size: 0.6em;
+      color: #445;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+    .footer a { color: #3a8dde; text-decoration: none; }
   </style>
 </head>
 <body>
-  <h1>Seán McArdle's Droid</h1>
+  <h1>R2-BK00</h1>
+  <div class="owner">Seán McArdle's Droid</div>
   <div class="status" id="status">CONNECTING...</div>
   
   <div class="controls">
@@ -175,6 +188,10 @@ const char* HTML = R"rawliteral(
   </div>
   
   <div class="log" id="log"></div>
+  <div class="footer">
+    Workshop by <strong>Seán McArdle</strong> · Hero Props Inc.<br>
+    <a href="mailto:sean@heroprops.art">sean@heroprops.art</a> · heroprops.art
+  </div>
 
   <script>
     let ws;
@@ -204,14 +221,15 @@ const char* HTML = R"rawliteral(
       ws.onopen = () => {
         status.textContent = 'CONNECTED';
         status.className = 'status connected';
-        addLog('Connected');
+        addLog('WebSocket connected', 'info');
       };
       ws.onclose = () => {
         status.textContent = 'DISCONNECTED';
         status.className = 'status';
+        addLog('Connection lost - reconnecting...', '');
         setTimeout(connect, 1000);
       };
-      ws.onmessage = (e) => addLog(e.data);
+      ws.onmessage = (e) => addLog('← ' + e.data, 'info');
     }
     
     function send(msg) {
@@ -225,8 +243,12 @@ const char* HTML = R"rawliteral(
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(msg);
     }
     
-    function addLog(msg) {
-      log.innerHTML += msg + '<br>';
+    function addLog(msg, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = msg;
+      log.appendChild(span);
+      log.appendChild(document.createElement('br'));
       log.scrollTop = log.scrollHeight;
     }
     
@@ -247,6 +269,16 @@ const char* HTML = R"rawliteral(
       send('D:' + currentDx.toFixed(2) + ',' + currentDy.toFixed(2));
     }
     
+    let lastDriveLog = 0;
+    function logDrive() {
+      const now = Date.now();
+      if (now - lastDriveLog > 200) {
+        lastDriveLog = now;
+        const pct = (v) => (v * 100).toFixed(0);
+        addLog('DRIVE → X:' + pct(currentDx) + '% Y:' + pct(currentDy) + '%', 'cmd');
+      }
+    }
+    
     function joyEnd() {
       if (!joyActive) return;
       joyActive = false;
@@ -255,16 +287,18 @@ const char* HTML = R"rawliteral(
       currentDx = 0;
       currentDy = 0;
       sendNow('D:0,0');
+      addLog('DRIVE → STOP', 'cmd');
     }
     
-    joy.onmousedown = (e) => { joyActive = true; joyMove(e.clientX, e.clientY); };
-    joy.ontouchstart = (e) => { joyActive = true; e.preventDefault(); joyMove(e.touches[0].clientX, e.touches[0].clientY); };
-    document.onmousemove = (e) => { if (joyActive) joyMove(e.clientX, e.clientY); };
-    document.ontouchmove = (e) => { if (joyActive) { e.preventDefault(); joyMove(e.touches[0].clientX, e.touches[0].clientY); } };
+    joy.onmousedown = (e) => { joyActive = true; joyMove(e.clientX, e.clientY); logDrive(); };
+    joy.ontouchstart = (e) => { joyActive = true; e.preventDefault(); joyMove(e.touches[0].clientX, e.touches[0].clientY); logDrive(); };
+    document.onmousemove = (e) => { if (joyActive) { joyMove(e.clientX, e.clientY); logDrive(); } };
+    document.ontouchmove = (e) => { if (joyActive) { e.preventDefault(); joyMove(e.touches[0].clientX, e.touches[0].clientY); logDrive(); } };
     document.onmouseup = joyEnd;
     document.ontouchend = joyEnd;
     
     let domeActive = false;
+    let lastDomeLog = 0;
     
     function domeMove(cx) {
       const r = dome.getBoundingClientRect();
@@ -275,6 +309,13 @@ const char* HTML = R"rawliteral(
       knob.style.top = '50%';
       const val = (x - margin) / (r.width - 2*margin);
       send('M:' + val.toFixed(2));
+      
+      const now = Date.now();
+      if (now - lastDomeLog > 200) {
+        lastDomeLog = now;
+        const deg = (val * 180).toFixed(0);
+        addLog('DOME → ' + deg + '°', 'info');
+      }
     }
     
     dome.onmousedown = (e) => { domeActive = true; domeMove(e.clientX); };
@@ -285,6 +326,7 @@ const char* HTML = R"rawliteral(
     document.addEventListener('touchend', () => domeActive = false);
     
     document.addEventListener('contextmenu', e => e.preventDefault());
+    addLog('Droid control system initializing...', 'info');
     connect();
   </script>
 </body>
