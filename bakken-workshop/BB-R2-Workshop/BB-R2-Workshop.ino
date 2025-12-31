@@ -1,16 +1,43 @@
 /*
- * BB-R2 Workshop - Working Version
- * Pins: 25=Left, 26=Right, 27=Dome
+ * BB-R2 Workshop Droid Controller
+ * Hero Props Inc. / Seán McArdle
+ * heroprops.art
+ * December 2025
+ * 
+ * Based on work by:
+ *   - Bjoern Giesler (github.com/bjoerngiesler) - Original BB-R2 STEM ESP32 firmware
+ *   - Michael Baddeley's 3D Printed Droids (patreon.com/mrbaddeley) - BB Astromech designs
+ *   - The Droid Builders community (astromech.net)
+ * 
+ * Built for a 2-day kids workshop at The Bakken Museum, Minneapolis.
+ * 16 kids (ages 9-14) assemble, wire, and decorate their own droids,
+ * then drive them home.
+ * 
+ * Key features:
+ *   - Each droid creates its own WiFi network (R2-BK01, R2-BK02, etc.)
+ *   - Kids connect with any phone or tablet — no app install needed
+ *   - Control via web browser: virtual joystick for driving, slider for dome
+ *   - mDNS support: access via bk01.local instead of IP address
+ *   - Watchdog stops motors if connection drops (safety first)
+ *   - Smooth ramping so movements feel natural, not jerky
+ * 
+ * Hardware: ESP32 DevKit + 3x FS90R continuous rotation servos
+ * Pins: GPIO 25 (Left), GPIO 26 (Right), GPIO 27 (Dome)
+ * 
+ * License: MIT
  */
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
 
 const char* DROID_ID = "BK-00";
+const char* DROID_OWNER = "Seán McArdle";
 const char* AP_SSID = "R2-BK00";
 const char* AP_PASS = "BK00droid";
+const char* MDNS_NAME = "bk00";
 
 #define LEFT_PIN   25
 #define RIGHT_PIN  26
@@ -48,7 +75,7 @@ const char* HTML = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>R2-BK00</title>
+  <title>Seán McArdle's Droid</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; touch-action: manipulation; }
@@ -129,7 +156,7 @@ const char* HTML = R"rawliteral(
   </style>
 </head>
 <body>
-  <h1>R2-BK00</h1>
+  <h1>Seán McArdle's Droid</h1>
   <div class="status" id="status">CONNECTING...</div>
   
   <div class="controls">
@@ -306,6 +333,7 @@ void setup() {
   delay(500);
   Serial.println("\n== BB-R2 Workshop ==");
   Serial.println("Droid: " + String(DROID_ID));
+  Serial.println("Owner: " + String(DROID_OWNER));
   
   pinMode(LEFT_PIN, OUTPUT);
   pinMode(RIGHT_PIN, OUTPUT);
@@ -337,6 +365,10 @@ void setup() {
   WiFi.softAP(AP_SSID, AP_PASS, 1, 0, 4);
   Serial.println("[OK] WiFi: " + String(AP_SSID));
   Serial.println("     IP: " + WiFi.softAPIP().toString());
+  
+  if (MDNS.begin(MDNS_NAME)) {
+    Serial.println("[OK] mDNS: http://" + String(MDNS_NAME) + ".local");
+  }
   
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
