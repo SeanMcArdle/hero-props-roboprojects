@@ -33,11 +33,11 @@
 #include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
 
-const char* DROID_ID = "BK-16";
-const char* DROID_OWNER = "Greta Olson";
-const char* AP_SSID = "R2-BK16";
-const char* AP_PASS = "BK16droid";
-const char* MDNS_NAME = "bk16";
+const char* DROID_ID = "BK-00";
+const char* DROID_OWNER = "Seán McArdle";
+const char* AP_SSID = "R2-BK00";
+const char* AP_PASS = "BK00droid";
+const char* MDNS_NAME = "bk00";
 
 #define LEFT_PIN   25
 #define RIGHT_PIN  26
@@ -75,7 +75,7 @@ const char* HTML = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>R2-BK16 - Greta Olson</title>
+  <title>R2-BK00 - Seán McArdle</title>
   <style>
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; touch-action: manipulation; }
@@ -168,8 +168,8 @@ const char* HTML = R"rawliteral(
   </style>
 </head>
 <body>
-  <h1>R2-BK16</h1>
-  <div class="owner">Greta Olson's Droid</div>
+  <h1>R2-BK00</h1>
+  <div class="owner">Seán McArdle's Droid</div>
   <div class="status" id="status">CONNECTING...</div>
   
   <div class="controls">
