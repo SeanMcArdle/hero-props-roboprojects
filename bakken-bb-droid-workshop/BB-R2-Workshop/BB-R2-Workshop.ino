@@ -33,6 +33,9 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
+#include <Preferences.h>
+
+Preferences prefs;
 
 const char* AP_SSID = "R2-BK00";
 const char* AP_PASS = "BK00droid";
@@ -96,7 +99,6 @@ const char* HTML = R"rawliteral(
     .edit-hint { text-align: center; font-size: 0.7em; color: #666; margin-bottom: 5px; }
     .status { text-align: center; font-size: 0.8em; color: #666; margin-bottom: 10px; }
     .status.connected { color: #0c0; }
-    
     .edit-modal {
       display: none;
       position: fixed;
@@ -128,10 +130,7 @@ const char* HTML = R"rawliteral(
       margin-bottom: 15px;
       font-family: inherit;
     }
-    .edit-box .buttons {
-      display: flex;
-      gap: 10px;
-    }
+    .edit-box .buttons { display: flex; gap: 10px; }
     .edit-box button {
       flex: 1;
       padding: 12px;
@@ -142,15 +141,8 @@ const char* HTML = R"rawliteral(
       cursor: pointer;
       font-family: inherit;
     }
-    .edit-box .save-btn {
-      background: #0c0;
-      color: #000;
-    }
-    .edit-box .cancel-btn {
-      background: #666;
-      color: #fff;
-    }
-    
+    .edit-box .save-btn { background: #0c0; color: #000; }
+    .edit-box .cancel-btn { background: #666; color: #fff; }
     .controls {
       display: flex;
       flex-direction: row;
@@ -160,7 +152,6 @@ const char* HTML = R"rawliteral(
     }
     .control-group { display: flex; flex-direction: column; align-items: center; }
     .label { font-size: 0.7em; color: #3a8dde; margin-bottom: 8px; letter-spacing: 2px; }
-    
     .joystick {
       width: 160px;
       height: 160px;
@@ -180,7 +171,6 @@ const char* HTML = R"rawliteral(
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
-    
     .dome-track {
       width: 160px;
       height: 60px;
@@ -200,7 +190,6 @@ const char* HTML = R"rawliteral(
       transform: translate(-50%, -50%);
       pointer-events: none;
     }
-    
     .log {
       height: 180px;
       background: #0a1220;
@@ -271,7 +260,173 @@ const char* HTML = R"rawliteral(
     <a href="https://heroprops.art" target="_blank">heroprops.art</a>
   </div>
   <script>
-    // ... JavaScript code unchanged ...
+    var gateway = `ws://${window.location.hostname}/ws`;
+    var websocket;
+
+    // UI Elements
+    const joy = document.getElementById('joy');
+    const stick = document.getElementById('stick');
+    const dome = document.getElementById('dome');
+    const knob = document.getElementById('knob');
+    const statusDiv = document.getElementById('status');
+    const logDiv = document.getElementById('log');
+
+    // State
+    let isConnected = false;
+    let lastDriveSend = 0;
+
+    // --- WebSocket Logic ---
+    function connect() {
+      websocket = new WebSocket(gateway);
+
+      websocket.onopen = function() {
+        isConnected = true;
+        statusDiv.innerHTML = "CONNECTED";
+        statusDiv.classList.add('connected');
+        addLog("Connected to Droid", "info");
+      };
+
+      websocket.onclose = function() {
+        isConnected = false;
+        statusDiv.innerHTML = "DISCONNECTED (Reconnecting...)";
+        statusDiv.classList.remove('connected');
+        addLog("Connection lost", "info");
+        setTimeout(connect, 2000); // Retry after 2s
+      };
+
+      websocket.onmessage = function(event) {
+        addLog("RX: " + event.data, "cmd");
+      };
+    }
+
+    function sendCmd(cmd) {
+      if (isConnected) websocket.send(cmd);
+    }
+
+    function addLog(msg, type) {
+      const div = document.createElement('div');
+      div.className = type;
+      div.innerText = "> " + msg;
+      logDiv.appendChild(div);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // --- Joystick Logic ---
+    // Max distance stick can move from center (Container/2 - Stick/2)
+    // (160 - 65) / 2 = 47.5
+    const maxDist = 47.5;
+
+    function handleJoystick(x, y) {
+      // Send max 20 times per second to prevent flooding
+      const now = Date.now();
+      if (now - lastDriveSend > 50) {
+        // Normalize to -1.0 to 1.0
+        const normX = (x / maxDist).toFixed(2);
+        const normY = (y / maxDist * -1).toFixed(2); // Invert Y for "up is positive"
+        sendCmd(`D:${normX},${normY}`);
+        lastDriveSend = now;
+      }
+    }
+
+    function resetJoystick() {
+      stick.style.transform = `translate(-50%, -50%)`;
+      sendCmd("D:0,0");
+    }
+
+    joy.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.targetTouches[0];
+      const rect = joy.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+
+      // Calculate offset from center
+      let x = touch.clientX - rect.left - centerX;
+      let y = touch.clientY - rect.top - centerY;
+
+      // Calculate distance
+      const dist = Math.sqrt(x*x + y*y);
+
+      // Cap distance at max radius
+      if (dist > maxDist) {
+        const ratio = maxDist / dist;
+        x *= ratio;
+        y *= ratio;
+      }
+
+      // Move stick visually
+      stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+      handleJoystick(x, y);
+    }, { passive: false });
+
+    joy.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      resetJoystick();
+    });
+
+    // --- Dome Slider Logic ---
+    // Track width 160, Knob width 50 -> Travel = 110px
+    const domeTravel = 110;
+
+    dome.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const touch = e.targetTouches[0];
+      const rect = dome.getBoundingClientRect();
+
+      // Calculate X relative to left edge of track
+      // Center of knob is at 25px offset usually, but we want 0 to 1 range
+      let x = touch.clientX - rect.left - 25; // 25 is half knob width
+
+      // Clamp
+      if (x < 0) x = 0;
+      if (x > domeTravel) x = domeTravel;
+
+      // Move knob visually
+      knob.style.transform = `translate(-50%, -50%) translate(${x}px, 0)`; // Reset center anchor first
+      knob.style.left = "25px"; // Reset base css
+
+      // Send command (0.0 to 1.0)
+      const val = (x / domeTravel).toFixed(2);
+      sendCmd(`M:${val}`);
+    }, { passive: false });
+
+    // --- Modal Logic (Customization) ---
+    function editDesignation() {
+      document.getElementById('designationModal').classList.add('show');
+      document.getElementById('designationInput').focus();
+    }
+    function closeDesignationModal() {
+      document.getElementById('designationModal').classList.remove('show');
+    }
+    function saveDesignation() {
+      const val = document.getElementById('designationInput').value.trim();
+      if(val) {
+        document.getElementById('designation').innerText = "R2-" + val;
+        sendCmd("I:" + val);
+        addLog("Renamed to R2-" + val, "info");
+      }
+      closeDesignationModal();
+    }
+
+    function editOwner() {
+      document.getElementById('ownerModal').classList.add('show');
+      document.getElementById('ownerInput').focus();
+    }
+    function closeOwnerModal() {
+      document.getElementById('ownerModal').classList.remove('show');
+    }
+    function saveOwner() {
+      const val = document.getElementById('ownerInput').value.trim();
+      if(val) {
+        document.getElementById('owner').innerText = val + "'s Droid";
+        sendCmd("O:" + val);
+        addLog("Operator set to " + val, "info");
+      }
+      closeOwnerModal();
+    }
+
+    // Start
     addLog('Droid control system initializing...', 'info');
     connect();
   </script>
@@ -292,7 +447,9 @@ void onWsEvent(AsyncWebSocket* srv, AsyncWebSocketClient* client,
   }
   else if (type == WS_EVT_DATA) {
     lastCmd = millis();
-    String cmd = String((char*)data).substring(0, len);
+    // Safe: use buffer length, do not overread
+    String cmd = "";
+    for(size_t i=0; i<len; i++) cmd += (char)data[i];
     if (cmd.startsWith("D:")) {
       int c = cmd.indexOf(',');
       float x = cmd.substring(2, c).toFloat();
@@ -312,6 +469,9 @@ void onWsEvent(AsyncWebSocket* srv, AsyncWebSocketClient* client,
       String newDesignation = cmd.substring(2);
       if (newDesignation.length() > 0 && newDesignation.length() <= 10) {
         droidDesignation = newDesignation;
+        prefs.begin("droid", false);
+        prefs.putString("designation", droidDesignation);
+        prefs.end();
         Serial.println("[Identity] Designation: " + droidDesignation);
       }
     }
@@ -319,6 +479,9 @@ void onWsEvent(AsyncWebSocket* srv, AsyncWebSocketClient* client,
       String newOperator = cmd.substring(2);
       if (newOperator.length() > 0 && newOperator.length() <= 30) {
         operatorName = newOperator;
+        prefs.begin("droid", false);
+        prefs.putString("operator", operatorName);
+        prefs.end();
         Serial.println("[Identity] Operator: " + operatorName);
       }
     }
@@ -328,6 +491,12 @@ void onWsEvent(AsyncWebSocket* srv, AsyncWebSocketClient* client,
 void setup() {
   Serial.begin(115200);
   delay(500);
+
+  prefs.begin("droid", false);
+  droidDesignation = prefs.getString("designation", "BK-00");
+  operatorName = prefs.getString("operator", "Your Name Here");
+  prefs.end();
+
   Serial.println("\n== BB-R2 Workshop ==");
   Serial.println("Designation: " + droidDesignation + " (customizable via web UI)");
   Serial.println("Operator: " + operatorName + " (customizable via web UI)");
