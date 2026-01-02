@@ -363,8 +363,8 @@ const char* HTML = R"rawliteral(
         document.title = 'R2-' + val + ' - ' + operatorName;
         sendNow('I:' + val);
         addLog('Designation updated: ' + val, 'info');
+        closeDesignationModal();
       }
-      closeDesignationModal();
     }
     
     // Edit owner
@@ -387,8 +387,8 @@ const char* HTML = R"rawliteral(
         document.title = 'R2-' + droidDesignation + ' - ' + val;
         sendNow('O:' + val);
         addLog('Operator name updated: ' + val, 'info');
+        closeOwnerModal();
       }
-      closeOwnerModal();
     }
     
     // Allow Enter key to save in modals
@@ -580,14 +580,20 @@ void onWsEvent(AsyncWebSocket* srv, AsyncWebSocketClient* client,
       targetDome = v * 180.0f;
     }
     else if (cmd.startsWith("I:")) {
-      // Identity update - designation
-      droidDesignation = cmd.substring(2);
-      Serial.println("[Identity] Designation: " + droidDesignation);
+      // Identity update - designation (validate: not empty, max 10 chars)
+      String newDesignation = cmd.substring(2);
+      if (newDesignation.length() > 0 && newDesignation.length() <= 10) {
+        droidDesignation = newDesignation;
+        Serial.println("[Identity] Designation: " + droidDesignation);
+      }
     }
     else if (cmd.startsWith("O:")) {
-      // Identity update - operator name
-      operatorName = cmd.substring(2);
-      Serial.println("[Identity] Operator: " + operatorName);
+      // Identity update - operator name (validate: not empty, max 30 chars)
+      String newOperator = cmd.substring(2);
+      if (newOperator.length() > 0 && newOperator.length() <= 30) {
+        operatorName = newOperator;
+        Serial.println("[Identity] Operator: " + operatorName);
+      }
     }
   }
 }
