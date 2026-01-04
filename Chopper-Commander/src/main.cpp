@@ -94,7 +94,7 @@ bool estopped = false;  // V3: E-STOP state
 
 // Watchdog
 unsigned long lastCommandTime = 0;
-#define WATCHDOG_TIMEOUT 500
+#define WATCHDOG_TIMEOUT 1000  // Increased to 1s to prevent WiFi stutter
 
 // ============== FUNCTION PROTOTYPES ==============
 
@@ -772,8 +772,8 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       if (estopped) return;
       String params = cmd.substring(6);
       int comma = params.indexOf(',');
-      int x = params.substring(0, comma).toInt();
-      int y = params.substring(comma + 1).toInt();
+      int x = constrain(params.substring(0, comma).toInt(), -100, 100);
+      int y = constrain(params.substring(comma + 1).toInt(), -100, 100);
       setDrive(x, y);
     }
     else if (cmd.startsWith("DOME:")) {
@@ -801,10 +801,11 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       char dir = cmd.charAt(6);
       int delta = (dir == '+') ? 1 : -1;
       
-      if (motor == 'L') leftTrim += delta;
-      else if (motor == 'R') rightTrim += delta;
-      else if (motor == 'D') domeTrim += delta;
-      else if (motor == 'F') frontArmTrim += delta;
+      // Limit trim to +/- 20 steps (approx +/- 100us)
+      if (motor == 'L') leftTrim = constrain(leftTrim + delta, -20, 20);
+      else if (motor == 'R') rightTrim = constrain(rightTrim + delta, -20, 20);
+      else if (motor == 'D') domeTrim = constrain(domeTrim + delta, -20, 20);
+      else if (motor == 'F') frontArmTrim = constrain(frontArmTrim + delta, -20, 20);
       
       saveTrim();
       wsLog("Trim: L=" + String(leftTrim) + ", R=" + String(rightTrim) + 
