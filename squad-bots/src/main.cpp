@@ -4,17 +4,22 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include "DFRobotDFPlayerMini.h"
 
 // -------------------------------------------------------------------------
 // 🌍 Globals
 // -------------------------------------------------------------------------
 HeroPropsProtocol radio;
+DFRobotDFPlayerMini myDFPlayer;
+HardwareSerial dfSerial(2); // Use UART2
+
 unsigned long lastHeartbeat = 0;
 bool isConnected = false; // FIX: Track connection state
 bool isWiggling = false;  // FIX: Prevent radio interference during wiggle
 
 Servo leftMotor;
 Servo rightMotor;
+Servo domeServo;
 
 // -------------------------------------------------------------------------
 // ⚙️ Motor Control Logic
@@ -103,7 +108,21 @@ void onDataReceived(const HpHeader& header, const uint8_t* payload, size_t len) 
             if (len == sizeof(HpPayloadAction)) {
                 HpPayloadAction* action = (HpPayloadAction*)payload;
                 Serial.printf("🎬 Action: ID %d, Param %d\n", action->actionId, action->parameter);
-                // TODO: Trigger Sound/LED
+                
+                // Action 10: Dome Control (0-200, Center 100)
+                if (action->actionId == 10) {
+                    int domeAngle = map(action->parameter, 0, 200, 0, 180);
+                    domeServo.write(domeAngle);
+                }
+
+                // Action 1: Play Sound (Param = Track Number, 0 = Random)
+                if (action->actionId == 1) {
+                    if (action->parameter == 0) {
+                        myDFPlayer.next();
+                    } else {
+                        myDFPlayer.play(action->parameter);
+                    }
+                }
             }
             break;
             
@@ -130,6 +149,10 @@ void setup() {
 
     rightMotor.setPeriodHertz(50);
     rightMotor.attach(PIN_MOTOR_RIGHT, 500, 2500);
+
+    domeServo.setPeriodHertz(50);
+    domeServo.attach(PIN_DOME, 500, 2500);
+    domeServo.write(90); // Center Dome
 
     drive(0, 0); // Ensure stopped
     // startupWiggle(); // FIX: Moved to end of setup to avoid blocking radio init
@@ -174,7 +197,16 @@ void setup() {
     }
 
     pinMode(PIN_NEOPIXEL, OUTPUT);
-    // TODO: Init DFPlayer
+    
+    // 5. Init Audio
+    dfSerial.begin(9600, SERIAL_8N1, PIN_DFPLAYER_RX, PIN_DFPLAYER_TX);
+    if (myDFPlayer.begin(dfSerial)) {
+        Serial.println("✅ DFPlayer Online");
+        myDFPlayer.volume(20); // Set volume (0-30)
+        myDFPlayer.play(1);    // Play startup sound
+    } else {
+        Serial.println("⚠️ DFPlayer Not Found (Check Wiring)");
+    }
 
     // FIX: Init Watchdog & Wiggle
     lastHeartbeat = millis();

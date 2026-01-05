@@ -13,7 +13,8 @@
 // 🚨 THE 42 TRAP: If you see '42', change it to your actual pin!
 #define PIN_MOTOR_LEFT  25
 #define PIN_MOTOR_RIGHT 26
-#define PIN_NEOPIXEL    27
+#define PIN_DOME        13 // Moved to clean pin (was 27)
+#define PIN_NEOPIXEL    27 // Reserved for LEDs
 #define PIN_DFPLAYER_RX 16
 #define PIN_DFPLAYER_TX 17
 
