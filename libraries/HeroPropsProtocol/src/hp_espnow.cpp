@@ -6,6 +6,7 @@ HeroPropsProtocol* HeroPropsProtocol::_instance = nullptr;
 HeroPropsProtocol::HeroPropsProtocol() {
     _instance = this;
     _sequenceOut = 0;
+    _lastSequenceFromCommander = 0;
 }
 
 bool HeroPropsProtocol::begin(uint8_t deviceId, uint8_t groupId, bool isCommander) {
@@ -76,7 +77,15 @@ bool HeroPropsProtocol::send(uint8_t targetId, HpMsgType type, const uint8_t* da
     // 3. Calculate CRC (Header + Payload)
     // We calculate CRC over the header and the payload bytes
     size_t dataSize = sizeof(HpHeader) + len;
-    packet.crc = calculateCRC((uint8_t*)&packet, dataSize);
+    
+    // FIX: Calculate CRC only over the valid data (Header + Payload)
+    // Note: We cast to uint8_t* to treat the struct as a byte array
+    uint32_t crc = calculateCRC((uint8_t*)&packet, dataSize);
+
+    // FIX: Place the CRC immediately after the payload in the buffer
+    // The struct has 'crc' at the end of the 200 byte buffer, but we are sending a shorter packet.
+    // We need to copy 'crc' to the byte offset [dataSize]
+    memcpy((uint8_t*)&packet + dataSize, &crc, 4);
 
     // 4. Send
     // For now, we only support Broadcast (0xFF) or we need to add peers dynamically.
@@ -185,6 +194,15 @@ void HeroPropsProtocol::handlePacket(const uint8_t* data, size_t len) {
     if (packet->header.groupID != 0 && packet->header.groupID != _groupId) {
         return;
     }
+
+    // FIX: Sequence Number Check (Replay Attack Prevention)
+    // If the sequence number is old, ignore it.
+    // We allow 0 to reset (Commander reboot).
+    if (packet->header.sequence > 0 && packet->header.sequence <= _lastSequenceFromCommander) {
+        // Potential duplicate or out-of-order packet
+        return;
+    }
+    _lastSequenceFromCommander = packet->header.sequence;
 
     // 4. Dispatch to User Callback
     if (_userCallback) {

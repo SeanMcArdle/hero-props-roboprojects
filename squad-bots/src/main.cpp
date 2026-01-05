@@ -10,6 +10,7 @@
 // -------------------------------------------------------------------------
 HeroPropsProtocol radio;
 unsigned long lastHeartbeat = 0;
+bool isConnected = false; // FIX: Track connection state
 
 Servo leftMotor;
 Servo rightMotor;
@@ -76,6 +77,7 @@ void startupWiggle() {
 void onDataReceived(const HpHeader& header, const uint8_t* payload, size_t len) {
     // 1. Update Watchdog
     lastHeartbeat = millis();
+    isConnected = true; // FIX: We are connected
 
     // 2. Handle Message Types
     switch (header.msgType) {
@@ -125,7 +127,7 @@ void setup() {
     rightMotor.attach(PIN_MOTOR_RIGHT, 500, 2500);
 
     drive(0, 0); // Ensure stopped
-    startupWiggle(); // Visual confirmation of life
+    // startupWiggle(); // FIX: Moved to end of setup to avoid blocking radio init
 
     // 2. Init WiFi (Hybrid Mode)
     // We create an AP so we can OTA update even without a router
@@ -168,6 +170,10 @@ void setup() {
 
     pinMode(PIN_NEOPIXEL, OUTPUT);
     // TODO: Init DFPlayer
+
+    // FIX: Init Watchdog & Wiggle
+    lastHeartbeat = millis();
+    startupWiggle(); 
 }
 
 // -------------------------------------------------------------------------
@@ -178,7 +184,7 @@ void loop() {
     ArduinoOTA.handle();
 
     // 2. Watchdog Check
-    if (millis() - lastHeartbeat > 1000) {
+    if (isConnected && (millis() - lastHeartbeat > 1000)) {
         // FAILSAFE MODE
         // Only print once per second to avoid spamming
         static unsigned long lastLog = 0;

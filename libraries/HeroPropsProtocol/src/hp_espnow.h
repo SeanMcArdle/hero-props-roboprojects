@@ -40,6 +40,7 @@ private:
     uint8_t _groupId;
     bool _isCommander;
     uint16_t _sequenceOut;
+    uint16_t _lastSequenceFromCommander;
     HpReceiveCallback _userCallback;
     
     // Internal ESP-NOW callbacks (static wrappers)
