@@ -22,6 +22,12 @@ Servo rightMotor;
 Servo domeServo;
 
 // -------------------------------------------------------------------------
+// 🎮 Control State
+// -------------------------------------------------------------------------
+int wifiThrottle = 0;
+int wifiTurn = 0;
+
+// -------------------------------------------------------------------------
 // ⚙️ Motor Control Logic
 // -------------------------------------------------------------------------
 void setMotorSpeed(Servo& motor, int speed, int trim) {
@@ -99,8 +105,9 @@ void onDataReceived(const HpHeader& header, const uint8_t* payload, size_t len) 
         case HP_MSG_DRIVE:
             if (len == sizeof(HpPayloadDrive)) {
                 HpPayloadDrive* cmd = (HpPayloadDrive*)payload;
-                // Serial.printf("🚗 Drive: T%d, R%d\n", cmd->throttle, cmd->turn);
-                drive(cmd->throttle, cmd->turn);
+                // Update target values, let loop() handle the driving
+                wifiThrottle = cmd->throttle;
+                wifiTurn = cmd->turn;
             }
             break;
 
@@ -153,6 +160,11 @@ void setup() {
     domeServo.setPeriodHertz(50);
     domeServo.attach(PIN_DOME, 500, 2500);
     domeServo.write(90); // Center Dome
+
+    // Init RC Input Pins
+    pinMode(PIN_RC_THROTTLE, INPUT);
+    pinMode(PIN_RC_STEERING, INPUT);
+    pinMode(PIN_RC_SPIN, INPUT);
 
     drive(0, 0); // Ensure stopped
     // startupWiggle(); // FIX: Moved to end of setup to avoid blocking radio init
@@ -217,21 +229,60 @@ void setup() {
 // 🔄 Loop
 // -------------------------------------------------------------------------
 void loop() {
-    // 1. Handle OTA
+    // 1. Handle OTA & Protocol
     ArduinoOTA.handle();
+    radio.update();
 
-    // 2. Watchdog Check
-    if (isConnected && (millis() - lastHeartbeat > 1000)) {
-        // FAILSAFE MODE
-        // Only print once per second to avoid spamming
-        static unsigned long lastLog = 0;
-        if (millis() - lastLog > 1000) {
-            // Serial.println("⚠️ Connection Lost - Failsafe Active");
-            lastLog = millis();
+    // 2. Read RC Input (The Pilot)
+    // Timeout 25000us (25ms) to avoid blocking too long if receiver is off
+    unsigned long rcT_raw = pulseIn(PIN_RC_THROTTLE, HIGH, 25000);
+    unsigned long rcS_raw = pulseIn(PIN_RC_STEERING, HIGH, 25000);
+    unsigned long rcR_raw = pulseIn(PIN_RC_SPIN, HIGH, 25000); // Spin Input
+
+    int finalThrottle = 0;
+    int finalTurn = 0;
+    bool rcOverride = false;
+
+    // Check if RC signal is valid (Receiver is ON and connected)
+    if (rcT_raw > 900 && rcT_raw < 2100) {
+        // Map Pulse (1000-2000) to Speed (-100 to 100)
+        int t = map(rcT_raw, RC_MIN_PULSE, RC_MAX_PULSE, -100, 100);
+        int s = map(rcS_raw, RC_MIN_PULSE, RC_MAX_PULSE, -100, 100);
+        int r = map(rcR_raw, RC_MIN_PULSE, RC_MAX_PULSE, -100, 100);
+
+        // Apply Deadzone
+        if (abs(t) < RC_DEADZONE) t = 0;
+        if (abs(s) < RC_DEADZONE) s = 0;
+        if (abs(r) < RC_DEADZONE) r = 0;
+
+        // Priority Logic: Spin > Drive
+        if (r != 0) {
+            // Spin in place (Left Stick X)
+            finalThrottle = 0;
+            finalTurn = r;
+            rcOverride = true;
+        } else if (t != 0 || s != 0) {
+            // Normal Drive (Right Stick)
+            finalThrottle = t;
+            finalTurn = s;
+            rcOverride = true;
         }
-        drive(0, 0); // STOP MOTORS
     }
 
-    // 3. Protocol Update
-    radio.update();
+    // 3. WiFi / Mixer Logic
+    if (!rcOverride) {
+        // If RC is not active (or receiver off), use WiFi values
+        finalThrottle = wifiThrottle;
+        finalTurn = wifiTurn;
+
+        // WiFi Watchdog: Only apply if we are relying on WiFi
+        if (isConnected && (millis() - lastHeartbeat > 1000)) {
+            finalThrottle = 0;
+            finalTurn = 0;
+            // Serial.println("⚠️ WiFi Failsafe");
+        }
+    }
+
+    // 4. Execute Drive
+    drive(finalThrottle, finalTurn);
 }

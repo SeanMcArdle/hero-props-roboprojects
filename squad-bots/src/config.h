@@ -19,6 +19,17 @@
 #define PIN_DFPLAYER_TX 17
 
 // -------------------------------------------------------------------------
+// 🎮 RC Input (Spektrum/PWM)
+// -------------------------------------------------------------------------
+#define PIN_RC_THROTTLE 33
+#define PIN_RC_STEERING 32
+#define PIN_RC_SPIN     35      // Optional: Left Stick X for pure spin
+#define RC_DEADZONE     15      // Ignore small stick movements
+#define RC_MIN_PULSE    1000
+#define RC_MAX_PULSE    2000
+#define RC_CENTER       1500
+
+// -------------------------------------------------------------------------
 // ⚙️ Motor Settings
 // -------------------------------------------------------------------------
 #define MOTOR_STOP      90
