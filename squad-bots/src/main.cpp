@@ -11,6 +11,7 @@
 HeroPropsProtocol radio;
 unsigned long lastHeartbeat = 0;
 bool isConnected = false; // FIX: Track connection state
+bool isWiggling = false;  // FIX: Prevent radio interference during wiggle
 
 Servo leftMotor;
 Servo rightMotor;
@@ -60,6 +61,7 @@ void drive(int throttle, int turn) {
 }
 
 void startupWiggle() {
+    isWiggling = true;
     Serial.println("👋 Wiggle Check...");
     // Left Fwd, Right Back
     drive(30, 30); // Spin
@@ -69,12 +71,15 @@ void startupWiggle() {
     delay(200);
     // Stop
     drive(0,0);
+    isWiggling = false;
 }
 
 // -------------------------------------------------------------------------
 // 📡 Protocol Callbacks
 // -------------------------------------------------------------------------
 void onDataReceived(const HpHeader& header, const uint8_t* payload, size_t len) {
+    if (isWiggling) return; // FIX: Ignore packets during startup dance
+
     // 1. Update Watchdog
     lastHeartbeat = millis();
     isConnected = true; // FIX: We are connected

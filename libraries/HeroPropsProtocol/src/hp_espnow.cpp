@@ -196,13 +196,25 @@ void HeroPropsProtocol::handlePacket(const uint8_t* data, size_t len) {
     }
 
     // FIX: Sequence Number Check (Replay Attack Prevention)
-    // If the sequence number is old, ignore it.
-    // We allow 0 to reset (Commander reboot).
-    if (packet->header.sequence > 0 && packet->header.sequence <= _lastSequenceFromCommander) {
-        // Potential duplicate or out-of-order packet
+    // We use uint16_t, so it wraps every ~21 mins at 50Hz.
+    // We need to handle wrap-around correctly.
+    uint16_t seq = packet->header.sequence;
+    uint16_t last = _lastSequenceFromCommander;
+
+    // 1. Allow Reset: If sequence is 0, we accept it (Commander rebooted)
+    if (seq == 0) {
+        // Reset detected
+        _lastSequenceFromCommander = 0;
+    } 
+    // 2. Check for valid new packet (handling wrap-around)
+    // We cast difference to int16_t. If positive, it's "ahead".
+    // If result is <= 0, it means the packet is old or duplicate.
+    else if ((int16_t)(seq - last) <= 0) {
+        // Old or duplicate packet
         return;
     }
-    _lastSequenceFromCommander = packet->header.sequence;
+    
+    _lastSequenceFromCommander = seq;
 
     // 4. Dispatch to User Callback
     if (_userCallback) {
