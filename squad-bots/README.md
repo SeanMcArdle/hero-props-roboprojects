@@ -1,6 +1,6 @@
 # Squad Bots: Omni-Node V1 ("Cosmic Cube")
 
-**Status**: 🟢 **RC2 - Safety Patched** (Jan 6, 2026)  
+**Status**: 🟢 **RC3 - Physics & Stability** (Jan 6, 2026)  
 **Hardware**: NodeMCU-32S (ESP32)  
 **Role**: Integrated Droid Controller & Web Server
 
@@ -10,6 +10,12 @@ The **Omni-Node** architecture eliminates the need for separate physical remotes
 ### Dual-Core System
 *   **Core 0 (Web/Comms)**: Handles the AsyncWebServer and WebSocket traffic from the iPad.
 *   **Core 1 (Pilot)**: Runs the motor logic, watchdog, and RC interrupts.
+
+### 🌊 Physics Engine (New in RC3)
+Ported from the "Bakken Workshop" codebase, RC3 introduces:
+*   **Exponential Smoothing**: Drive motors ramp up/down (Factor: 0.15) to protect gearboxes and provide cinematic movement.
+*   **Drift Correction**: Software trim (-3) eliminates phantom dome rotation.
+*   **Heartbeat Keep-Alive**: Web interface sends invalidation packets at 10Hz to prevent watchdog timeouts during smooth scrolling.
 
 ## 🛡️ Safety Features (Red Team Verified)
 Following the Jan 6 security audit, the following failsafes are active:

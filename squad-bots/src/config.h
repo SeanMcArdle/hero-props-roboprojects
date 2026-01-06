@@ -37,6 +37,15 @@
 #define TRIM_LEFT       0       // Adjust if bot drifts
 #define TRIM_RIGHT      0
 
+// ⚙️ Dome Settings
+#define TRIM_DOME       -3      // Fix Clockwise Drift (Try -5 to 5)
+#define DOME_SPEED_MAX  40      // Slower Spin: Limits range to 90 +/- 40 (50-130)
+#define DOME_SMOOTH     0.1     // Smoothing factor for dome
+
+// ⚙️ Drive Settings (Smoothing & Physics)
+#define DRIVE_SMOOTH    0.15    // Lower = Smoother, Higher = Snappier
+#define DRIVE_SPEED_MAX 400     // Microseconds offset from 1500 (Max Speed Cap)
+
 // -------------------------------------------------------------------------
 // 📡 Network Settings
 // -------------------------------------------------------------------------

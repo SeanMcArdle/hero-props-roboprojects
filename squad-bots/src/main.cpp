@@ -57,22 +57,59 @@ void IRAM_ATTR isrSpin() {
 }
 
 // -------------------------------------------------------------------------
-// ⚙️ Motor Control Logic
+// ⚙️ Motor Control Logic (With Physics Smoothing)
 // -------------------------------------------------------------------------
-void setMotorSpeed(Servo& motor, int speed, int trim) {
-    int output = map(speed, -100, 100, MOTOR_MIN, MOTOR_MAX);
-    output += trim;
-    output = constrain(output, MOTOR_MIN, MOTOR_MAX);
-    motor.write(output);
+// Smooth State Variables
+float currentLeft = 0;
+float currentRight = 0;
+float currentDome = 90;
+float targetLeft = 0;
+float targetRight = 0;
+float targetDome = 90;
+
+void outputPhysics() {
+    // 1. Smooth the Drive
+    currentLeft = currentLeft * (1.0 - DRIVE_SMOOTH) + targetLeft * DRIVE_SMOOTH;
+    currentRight = currentRight * (1.0 - DRIVE_SMOOTH) + targetRight * DRIVE_SMOOTH;
+    
+    // 2. Smooth the Dome
+    currentDome = currentDome * (1.0 - DOME_SMOOTH) + targetDome * DOME_SMOOTH;
+
+    // 3. Output to Motors (Microseconds for precision)
+    // Center is 1500. Range is +/- DRIVE_SPEED_MAX (400)
+    int leftUs = 1500 + TRIM_LEFT + (int)(currentLeft * DRIVE_SPEED_MAX);
+    int rightUs = 1500 + TRIM_RIGHT - (int)(currentRight * DRIVE_SPEED_MAX); // Inverted right
+    
+    // Safety Clamp
+    leftUs = constrain(leftUs, 1000, 2000);
+    rightUs = constrain(rightUs, 1000, 2000);
+
+    leftMotor.writeMicroseconds(leftUs);
+    rightMotor.writeMicroseconds(rightUs);
+    
+    // Dome output (Angle)
+    domeServo.write((int)currentDome);
 }
 
+void setDriveTarget(float throttle, float turn) {
+    // Inputs are -1.0 to 1.0
+    // Simple Tank Mix for Joystick
+    targetLeft = constrain(throttle + turn, -1.0f, 1.0f);
+    targetRight = constrain(throttle - turn, -1.0f, 1.0f);
+    
+    // Immediate stop if inputs are zero (Optional, but BB-R2 usually lets it ramp down naturally.
+    // If we want "snappy" stop but smooth accel, we can check for 0.
+    // For now, let's keep it fully smoothed as requested ("don't destroy servos"))
+    if (throttle == 0 && turn == 0) {
+        // Optional: Uncomment to make stopping faster than starting
+        // targetLeft = 0; targetRight = 0; 
+        // currentLeft = 0; currentRight = 0; // Hard stop
+    }
+}
+
+// Wrapper for legacy calls (int -100 to 100)
 void drive(int throttle, int turn) {
-    int left = throttle + turn;
-    int right = throttle - turn;
-    left = constrain(left, -100, 100);
-    right = constrain(right, -100, 100);
-    setMotorSpeed(leftMotor, left, TRIM_LEFT);
-    setMotorSpeed(rightMotor, -right, TRIM_RIGHT); 
+    setDriveTarget(throttle / 100.0f, turn / 100.0f);
 }
 
 // -------------------------------------------------------------------------
@@ -169,10 +206,11 @@ void loop() {
         webDriveY = 0;
     }
 
-    // A. Dome Logic (Always Web/Perfomer for now)
-    // webDomeX is 0-200. Map to 0-180 for servo.
-    int domeTarget = map(webDomeX, 0, 200, 0, 180);
-    domeServo.write(domeTarget);
+    // A. Dome Logic
+    // webDomeX is 0-200. Center 100.
+    int domeSpeedMapped = map(webDomeX, 0, 200, -DOME_SPEED_MAX, DOME_SPEED_MAX);
+    targetDome = 90 + TRIM_DOME + domeSpeedMapped;
+    targetDome = constrain(targetDome, 0, 180);
 
     // B. Handle Web Commands (Sound/Actions)
     if (webCommandId > 0) {
@@ -189,52 +227,52 @@ void loop() {
     }
 
     // C. Drive Logic (RC Priority)
-    int throttle = 0;
-    int turn = 0;
+    float inputThrottle = 0;
+    float inputTurn = 0;
     bool rcActive = false;
 
     // Check recent RC valid pulses (must be within last 100ms to be valid)
-    // Since interrupts update variables instantly, we just check values.
-    // NOTE: We should implement a "stale data" check in a real interrupt system, 
-    // but for now we assume if the values are in range, they are good.
-    // To match PulseIn logic: RC_MIN 1000, RC_MAX 2000.
-    
-    // Simple verification (Check range)
     if (rc_val[0] > 900 && rc_val[0] < 2100) {
         // Valid Throttle
         int val = rc_val[0];
         // Deadzone
-        if (val > 1480 && val < 1520) val = 1500;
-        int t = map(val, 1000, 2000, -100, 100);
-        if (t != 0) { throttle = t; rcActive = true; }
+        if (val > (1500 - RC_DEADZONE) && val < (1500 + RC_DEADZONE)) val = 1500;
+        inputThrottle = map(val, 1000, 2000, -100, 100) / 100.0f;
+        if (inputThrottle != 0) rcActive = true;
     }
 
     if (rc_val[1] > 900 && rc_val[1] < 2100) {
         // Valid Steering
         int val = rc_val[1];
-        if (val > 1480 && val < 1520) val = 1500;
-        int s = map(val, 1000, 2000, -100, 100);
-        if (s != 0) { turn = s; rcActive = true; }
+        if (val > (1500 - RC_DEADZONE) && val < (1500 + RC_DEADZONE)) val = 1500;
+        inputTurn = map(val, 1000, 2000, -100, 100) / 100.0f;
+        if (inputTurn != 0) rcActive = true;
     }
 
     if (rc_val[2] > 900 && rc_val[2] < 2100) {
         // Valid Spin
         int val = rc_val[2];
-        if (val > 1480 && val < 1520) val = 1500;
-        int r = map(val, 1000, 2000, -100, 100);
+        if (val > (1500 - RC_DEADZONE) && val < (1500 + RC_DEADZONE)) val = 1500;
+        float r = map(val, 1000, 2000, -100, 100) / 100.0f;
         if (r != 0) { 
-            throttle = 0; Safety: Watchdog prevents runaway)
-        drive(webDriveY, webDriveX
+            inputThrottle = 0; 
+            inputTurn = r; 
+            rcActive = true; 
+        }
     }
 
     if (!rcActive) {
-        // Fallback to Web Drive (if implemented)
-        // drive(webDriveX, webDriveY);
-        // For now, auto-stop
-        drive(0, 0);
-    } else {
-        drive(throttle, turn);
-    }
+        // Fallback to Web Drive (Safety: Watchdog prevents runaway)
+        // Web variables are int -100 to 100
+        inputThrottle = webDriveY / 100.0f;
+        inputTurn = webDriveX / 100.0f;
+    } 
+
+    // Set targets based on inputs
+    setDriveTarget(inputThrottle, inputTurn);
+
+    // Apply Physics & Output
+    outputPhysics();
 
     delay(5); // Small breather for Core 1
 }

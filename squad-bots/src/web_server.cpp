@@ -17,52 +17,170 @@ const char* html_page = R"rawliteral(
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>SquadBot Command</title>
+    <title>Jellybean Command</title>
     <style>
-        body { background-color: #222; color: white; font-family: sans-serif; text-align: center; overflow: hidden; touch-action: none; }
-        .container { display: flex; flex-direction: column; height: 100vh; justify-content: space-around; }
-        .status { font-size: 14px; margin-top: 5px; color: #00ff00; }
+        :root {
+            --prince-bg: #150015;
+            --prince-panel: #2a002a;
+            --prince-purple: #9400D3; /* Dark Orchid */
+            --prince-gold: #C0C0C0; /* Silver */
+            --text-color: #E6E6FA; /* Lavender */
+        }
+        body { 
+            background-color: var(--prince-bg); 
+            color: var(--text-color); 
+            font-family: 'Courier New', monospace; 
+            text-align: center; 
+            overflow: hidden; 
+            touch-action: none; 
+            margin: 0;
+            position: fixed; /* Lock to viewport */
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+        .container { 
+            display: flex; 
+            flex-direction: column; 
+            height: 100%; 
+            width: 100%;
+            justify-content: space-between; 
+            padding: 10px; 
+            box-sizing: border-box; 
+        }
         
-        .zone { display: flex; justify-content: center; align-items: center; flex: 1; border: 1px dashed #555; position: relative; }
-        .label { position: absolute; top: 10px; left: 10px; color: #888; font-size: 12px; }
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--prince-purple); padding-bottom: 5px; margin-bottom: 10px; }
+        .title { color: var(--prince-gold); font-weight: bold; font-size: 20px; letter-spacing: 2px; }
+        .status { font-size: 12px; color: #555; font-weight: bold; }
+        .connected { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
         
-        /* Joystick */
-        .joystick-area { width: 250px; height: 250px; background: rgba(255,255,255,0.1); border-radius: 50%; position: relative; touch-action: none; }
-        .knob { width: 80px; height: 80px; background: #0088ff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 15px #0088ff; }
+        /* Joysticks Container */
+        .controls-area { 
+            display: flex; 
+            flex: 1; 
+            justify-content: space-around; 
+            align-items: center; 
+            width: 100%;
+        }
 
-        /* Buttons */
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 90%; max-width: 400px; }
-        .btn { padding: 20px; font-size: 18px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
-        .btn-happy { background: linear-gradient(145deg, #00ff00, #00aa00); color: black; }
-        .btn-sad { background: linear-gradient(145deg, #00aaff, #0055aa); color: black; }
-        .btn-angry { background: linear-gradient(145deg, #ff4444, #aa0000); color: white; }
-        .btn-dance { background: linear-gradient(145deg, #ffff00, #aaaa00); color: black; }
+        /* Joystick Zone */
+        .zone { 
+            position: relative; 
+            width: 140px; 
+            height: 140px; 
+            background: radial-gradient(circle, var(--prince-panel) 0%, var(--prince-bg) 70%);
+            border: 2px solid var(--prince-purple); 
+            border-radius: 50%; 
+            touch-action: none;
+            box-shadow: 0 0 15px rgba(148, 0, 211, 0.2);
+        }
+        
+        .label { 
+            position: absolute; 
+            bottom: -25px; 
+            width: 100%; 
+            text-align: center; 
+            color: var(--prince-gold); 
+            font-size: 12px; 
+            text-transform: uppercase; 
+        }
+
+        /* The Stick */
+        .knob { 
+            width: 50px; 
+            height: 50px; 
+            background: radial-gradient(circle, var(--prince-gold) 0%, #696969 100%); 
+            border-radius: 50%; 
+            position: absolute;  
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            box-shadow: 0 0 10px var(--prince-gold);
+            pointer-events: none; /* Let clicks pass to zone */
+        }
+        .knob.pilot { background: radial-gradient(circle, var(--prince-purple) 0%, #4B0082 100%); box-shadow: 0 0 10px var(--prince-purple); }
+
+        /* Action Bar */
+        .actions { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr 1fr 1fr; 
+            gap: 10px; 
+            padding: 10px; 
+            background: var(--prince-panel);
+            border-radius: 15px;
+            border: 1px solid var(--prince-purple);
+        }
+        .btn { 
+            padding: 15px 5px; 
+            font-size: 12px; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            background: #3a1a3a;
+            color: var(--prince-gold);
+            border: 1px solid var(--prince-gold);
+            text-transform: uppercase;
+        }
+        .btn:active { background: var(--prince-gold); color: #000; transform: scale(0.95); }
+
+        /* Debug Text / Console */
+        .debug { display: none; } /* Hide old debug */
+        
+        .console-box {
+            flex: 1; /* Take remaining space */
+            background: #000;
+            border: 1px solid #333;
+            border-top: 2px solid var(--prince-purple);
+            margin-top: 10px;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            text-align: left;
+            overflow-y: hidden; /* Auto scroll layout */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; /* Keep new items at bottom */
+            opacity: 0.9;
+            min-height: 100px;
+        }
+
+        .log-line { margin: 2px 0; }
+        .log-drive { color: #FF8C00; } /* Dark Orange - legible */
+        .log-dome { color: #00BFFF; } /* Deep Sky Blue - legible */
+        .log-cmd { color: #32CD32; } /* Lime Green */
 
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="status" class="status">Connecting...</div>
+        <div class="header">
+            <div class="title">JELLYBEAN</div>
+            <div id="status" class="status">CONNECTING...</div>
+        </div>
 
-        <!-- Dome Joystick -->
-        <div class="zone">
-            <div class="label">PERFORMER (DOME)</div>
-            <div id="joyParams" style="display:none">0,0</div>
-            <div id="joystick" class="joystick-area">
-                <div id="knob" class="knob"></div>
+        <div class="controls-area">
+            <!-- Left Stick (Drive) -->
+            <div class="zone" id="joyDrive">
+                <div class="knob pilot" id="knobDrive"></div>
+                <div class="label">PILOT</div>
+            </div>
+
+            <!-- Right Stick (Dome) -->
+            <div class="zone" id="joyDome">
+                <div class="knob" id="knobDome"></div>
+                <div class="label">PERFORMER</div>
             </div>
         </div>
 
-        <!-- Action Pad -->
-        <div class="zone">
-            <div class="label">ACTIONS</div>
-            <div class="grid">
-                <button class="btn btn-happy" onmousedown="sendCmd(1)">HAPPY</button>
-                <button class="btn btn-sad" onmousedown="sendCmd(2)">SAD</button>
-                <button class="btn btn-angry" onmousedown="sendCmd(3)">ANGRY</button>
-                <button class="btn btn-dance" onmousedown="sendCmd(4)">DANCE</button>
-            </div>
+        <div class="actions">
+            <button class="btn" onmousedown="sendCmd(1)">HAPPY</button>
+            <button class="btn" onmousedown="sendCmd(2)">SAD</button>
+            <button class="btn" onmousedown="sendCmd(3)">ANGRY</button>
+            <button class="btn" onmousedown="sendCmd(4)">PARTY</button>
+        </div>
+
+        <div class="console-box" id="console">
+            <div class="log-line" style="color:#666">System Ready...</div>
         </div>
     </div>
 
@@ -71,110 +189,136 @@ const char* html_page = R"rawliteral(
         var gateway = `ws://${window.location.hostname}/ws`;
         var websocket;
         
+        function log(msg, cls) {
+            var c = document.getElementById('console');
+            var line = document.createElement('div');
+            line.className = 'log-line ' + cls;
+            line.innerHTML = msg;
+            c.appendChild(line);
+            
+            // Limit history to keep layout stable
+            if(c.childElementCount > 6) {
+                c.removeChild(c.firstChild);
+            }
+        }
+
         function initWebSocket() {
-            console.log('Trying to open a WebSocket connection...');
             websocket = new WebSocket(gateway);
             websocket.onopen = onOpen;
             websocket.onclose = onClose;
-            websocket.onmessage = onMessage;
         }
 
         function onOpen(event) {
             document.getElementById('status').innerText = "CONNECTED";
-            document.getElementById('status').style.color = "#00ff00";
+            document.getElementById('status').classList.add("connected");
         }
         function onClose(event) {
             document.getElementById('status').innerText = "DISCONNECTED";
-            document.getElementById('status').style.color = "red";
+            document.getElementById('status').classList.remove("connected");
             setTimeout(initWebSocket, 2000);
         }
-        function onMessage(event) { 
-            // Handle feedback
-        }
 
-        // Joystick Logic
-        const joystick = document.getElementById('joystick');
-        const knob = document.getElementById('knob');
-        let rect = joystick.getBoundingClientRect();
-        let centerX = rect.width / 2;
-        let centerY = rect.height / 2;
-        let isDragging = false;
-        let limiter = 0; // Rate limiter for slow wifi
+        // Joystick Logic Factory
+        function createJoystick(zoneId, knobId, prefix, isDrive) {
+            const zone = document.getElementById(zoneId);
+            const knob = document.getElementById(knobId);
+            let isDragging = false;
+            let inputX = 0;
+            let inputY = 0;
 
-        joystick.addEventListener('touchstart', startDrag, {passive: false});
-        joystick.addEventListener('touchmove', drag, {passive: false});
-        joystick.addEventListener('touchend', endDrag);
-        
-        // Mouse support for testing
-        joystick.addEventListener('mousedown', startDrag);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', endDrag);
+            // Heartbeat: Send data at 10Hz to prevent watchdog timeout
+            setInterval(() => {
+                if (!isDragging) return;
+                
+                let rect = zone.getBoundingClientRect();
+                let maxRadius = rect.width / 2 - 25; 
 
-        function startDrag(e) {
-            isDragging = true;
-            drag(e);
-        }
+                // Normalize
+                let valX, valY;
+                if (isDrive) {
+                    valX = Math.floor((inputX / maxRadius) * 100);
+                    valY = Math.floor((inputY / maxRadius) * -100); // Invert Y
+                } else {
+                    valX = Math.floor((inputX / maxRadius) * 100) + 100;
+                    valY = Math.floor((inputY / maxRadius) * 100) + 100;
+                }
 
-        function drag(e) {
-            if (!isDragging) return;
-            e.preventDefault();
-            
-            let clientX, clientY;
-            if(e.touches) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
+                sendData(prefix, valX, valY);
+            }, 100);
+
+            function updateVisuals(x, y) {
+                // Visuals
+                knob.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`; 
+                inputX = x;
+                inputY = y;
             }
 
-            rect = joystick.getBoundingClientRect();
-            // Recalculate center
-            centerX = rect.width / 2;
-            centerY = rect.height / 2;
+            function handleDrag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-            let x = clientX - rect.left - centerX;
-            let y = clientY - rect.top - centerY;
-            
-            // Limit Radius
-            let distance = Math.sqrt(x*x + y*y);
-            let maxRadius = rect.width / 2 - 40; // 40 is knob radius
-            if (distance > maxRadius) {
-                let angle = Math.atan2(y, x);
-                x = Math.cos(angle) * maxRadius;
-                y = Math.sin(angle) * maxRadius;
+                let rect = zone.getBoundingClientRect();
+                let centerX = rect.width / 2;
+                let centerY = rect.height / 2;
+
+                let x = clientX - rect.left - centerX;
+                let y = clientY - rect.top - centerY;
+                
+                let distance = Math.sqrt(x*x + y*y);
+                let maxRadius = rect.width / 2 - 25; 
+                if (distance > maxRadius) {
+                    let angle = Math.atan2(y, x);
+                    x = Math.cos(angle) * maxRadius;
+                    y = Math.sin(angle) * maxRadius;
+                }
+                updateVisuals(x, y);
             }
 
-            // Update Knob
-            knob.style.transform = `translate(${x - 40}px, ${y - 40}px)`; // -40 centers knob
-
-            // Send data (Rate limited)
-            limiter++;
-            if (limiter % 3 === 0) {
-                // Map to 0-200
-                let mapX = Math.floor((x / maxRadius) * 100) + 100;
-                let mapY = Math.floor((y / maxRadius) * 100) + 100;
-                sendJoy(mapX, mapY);
+            function start(e) { isDragging = true; handleDrag(e); }
+            function end() { 
+                isDragging = false; 
+                knob.style.transform = `translate(-50%, -50%)`; // CSS Center
+                if (isDrive) sendData(prefix, 0, 0);
+                else sendData(prefix, 100, 100);
             }
+
+            zone.addEventListener('mousedown', start);
+            zone.addEventListener('touchstart', start, {passive: false});
+            window.addEventListener('mousemove', handleDrag);
+            window.addEventListener('touchmove', handleDrag, {passive: false});
+            window.addEventListener('mouseup', end);
+            window.addEventListener('touchend', end);
         }
 
-        function endDrag() {
-            isDragging = false;
-            knob.style.transform = `translate(-50%, -50%)`; // Back to center CSS
-            sendJoy(100, 100);
-        }
+        // Initialize Joysticks
+        createJoystick('joyDrive', 'knobDrive', 'D', true);
+        createJoystick('joyDome',  'knobDome',  'J', false);
 
-        function sendJoy(x, y) {
+        function sendData(prefix, x, y) {
             if (websocket.readyState === WebSocket.OPEN) {
-                websocket.send(`J:${x},${y}`);
+                websocket.send(`${prefix}:${x},${y}`);
+                
+                let type = (prefix === 'D') ? "DRIVE" : "DOME";
+                let cls = (prefix === 'D') ? "log-drive" : "log-dome";
+                
+                if (prefix === 'D' && x === 0 && y === 0) {
+                     log(`${type} &#8594; STOP`, cls);
+                } else if (prefix === 'J' && x === 100 && y === 100) {
+                     log(`${type} &#8594; CENTER`, cls);
+                } else {
+                     let suffix = (prefix === 'D') ? "%" : ""; 
+                     log(`${type} &#8594; X:${x}${suffix} Y:${y}${suffix}`, cls);
+                }
             }
         }
 
         function sendCmd(id) {
             if (websocket.readyState === WebSocket.OPEN) {
                 websocket.send(`C:${id}`);
-                // Haptic feedback if available
                 if (navigator.vibrate) navigator.vibrate(50);
+                log(`CMD &#8594; ACTION ${id}`, "log-cmd");
             }
         }
 
@@ -203,7 +347,13 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
             }
 
             // Parse "J:150,150" or "C:1"
-            if (msg.startsWith("J:")) {
+            if (msg.startsWith("D:")) {
+                int comma = msg.indexOf(',');
+                if (comma > 0) {
+                    webDriveX = msg.substring(2, comma).toInt(); // Throttle
+                    webDriveY = msg.substring(comma+1).toInt();  // Steering
+                }
+            } else if (msg.startsWith("J:")) {
                 int comma = msg.indexOf(',');
                 if (comma > 0) {
                     webDomeX = msg.substring(2, comma).toInt(); // Pan (Spin)
