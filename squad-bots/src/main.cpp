@@ -4,11 +4,15 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <FastLED.h>
 #include "web_server.h"
 
 // -------------------------------------------------------------------------
 // 🌍 Globals
 // -------------------------------------------------------------------------
+#define NUM_LEDS 4
+CRGB leds[NUM_LEDS];
+
 HeroPropsProtocol radio;
 
 unsigned long lastHeartbeat = 0;
@@ -104,6 +108,12 @@ void setup() {
     domeServo.attach(PIN_DOME, 500, 2500);
     domeServo.write(90); 
 
+    // 1b. Init LEDs
+    FastLED.addLeds<NEOPIXEL, PIN_NEOPIXEL>(leds, NUM_LEDS);
+    FastLED.setBrightness(50);
+    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Boot Color
+    FastLED.show();
+
     // 2. Attach Interrupts for RC (The Pilot)
     pinMode(PIN_RC_THROTTLE, INPUT);
     pinMode(PIN_RC_STEERING, INPUT);
@@ -126,6 +136,10 @@ void setup() {
     // 4. Init OTA
     ArduinoOTA.setHostname(BOT_NAME);
     ArduinoOTA.setPassword("heroprops");
+    // SAFETY: Stop motors before OTA update starts (PWM keeps running during core blocking)
+    ArduinoOTA.onStart([]() {
+        drive(0, 0);
+    });
     ArduinoOTA.begin();
 
     // 5. Init ESP-NOW (The Nervous System)
@@ -148,6 +162,13 @@ void loop() {
     // 1. Process Logic
     // ----------------------
 
+    // SAFETY: Web Watchdog
+    // If no packet received for 500ms, force stop.
+    if (millis() - lastWebPacket > 500) {
+        webDriveX = 0;
+        webDriveY = 0;
+    }
+
     // A. Dome Logic (Always Web/Perfomer for now)
     // webDomeX is 0-200. Map to 0-180 for servo.
     int domeTarget = map(webDomeX, 0, 200, 0, 180);
@@ -155,7 +176,14 @@ void loop() {
 
     // B. Handle Web Commands (Sound/Actions)
     if (webCommandId > 0) {
-        Serial.printf("🔊 Web Cmd: %d (Play sound via iPad speakers!)\n", webCommandId);
+        Serial.printf("🔊 Web Cmd: %d\n", webCommandId);
+        
+        if (webCommandId == 1) fill_solid(leds, NUM_LEDS, CRGB::Green);  // Happy
+        if (webCommandId == 2) fill_solid(leds, NUM_LEDS, CRGB::Blue);   // Sad
+        if (webCommandId == 3) fill_solid(leds, NUM_LEDS, CRGB::Red);    // Angry
+        if (webCommandId == 4) fill_solid(leds, NUM_LEDS, CRGB::Yellow); // Dance (Party)
+        FastLED.show();
+
         // Reset command
         webCommandId = 0;
     }
@@ -195,10 +223,8 @@ void loop() {
         if (val > 1480 && val < 1520) val = 1500;
         int r = map(val, 1000, 2000, -100, 100);
         if (r != 0) { 
-            throttle = 0; 
-            turn = r; 
-            rcActive = true; 
-        }
+            throttle = 0; Safety: Watchdog prevents runaway)
+        drive(webDriveY, webDriveX
     }
 
     if (!rcActive) {

@@ -14,6 +14,9 @@ extern volatile int webDomeY; // 0-200 (Center 100)
 extern volatile int webDriveX; // -100 to 100 (Optional Web Drive)
 extern volatile int webDriveY; // -100 to 100
 
+// Safety Watchdog
+extern volatile unsigned long lastWebPacket;
+
 // Command Queue (Simple Lock-free or volatile flag)
 extern volatile int webCommandId; // 0 = None, >0 = Action ID
 

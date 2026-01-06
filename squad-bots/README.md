@@ -1,31 +1,44 @@
-# Squad Bots: JL-BN ("Jellybean") Prototype
+# Squad Bots: Omni-Node V1 ("Cosmic Cube")
 
-**Status**: 🛠️ IN DEVELOPMENT  
+**Status**: 🟢 **RC2 - Safety Patched** (Jan 6, 2026)  
 **Hardware**: NodeMCU-32S (ESP32)  
-**Role**: Swarm Bot / Hybrid Controller
+**Role**: Integrated Droid Controller & Web Server
 
-## 🤖 About JL-BN
-"Jellybean" is the Golden Master prototype for the Squad Bot platform. It is designed to be a low-cost, replicable droid for the Bakken Museum workshops.
+## 🤖 Architecture: "The Interface is the iPad"
+The **Omni-Node** architecture eliminates the need for separate physical remotes. The ESP32 acts as the Brain, the Router, and the Web Server simultaneously.
 
-### Features
-*   **Swarm Mode**: Controlled via ESP-NOW by a Commander unit.
-*   **Hybrid Mode**: Can host its own WiFi Access Point and Web UI for direct control.
-*   **Multimedia**: DFPlayer Mini for sound, Neopixels for status/personality.
-*   **Motion**: Differential drive (Continuous Rotation Servos or DC Motors).
+### Dual-Core System
+*   **Core 0 (Web/Comms)**: Handles the AsyncWebServer and WebSocket traffic from the iPad.
+*   **Core 1 (Pilot)**: Runs the motor logic, watchdog, and RC interrupts.
+
+## 🛡️ Safety Features (Red Team Verified)
+Following the Jan 6 security audit, the following failsafes are active:
+1.  **Dead-Man's Switch (Watchdog)**: If the iPad disconnects or WiFi lags for >500ms, motors STOP.
+2.  **OTA Interlock**: Updating firmware wirelessly automatically kills motor power before writing to flash.
+3.  **Connection Scrub**: Closing the browser tab performs an immediate E-Stop.
+
+## 🎮 Controls (Web Interface)
+Connect to WiFi `JL-BN-Net` (Password: `heroprops`) and visit `http://192.168.4.1`:
+*   **Left Stick**: Drive (Forward/Turn)
+*   **Right Stick**: Dome (Spin/Tilt)
+*   **Action Buttons**: Triggers LED animations (Happy/Sad/Dance) - *Audio plays on iPad only*
 
 ## 🔌 Wiring (NodeMCU-32S)
 
 | Component | Pin | Notes |
 | :--- | :--- | :--- |
-| **Left Motor** | GPIO 25 | Servo or H-Bridge PWM |
-| **Right Motor** | GPIO 26 | Servo or H-Bridge PWM |
+| **Left Motor** | GPIO 25 | Continuous Rotation Servo |
+| **Right Motor** | GPIO 26 | Continuous Rotation Servo |
+| **Dome Servo** | GPIO 13 | Standard Servo (Moved from 27) |
 | **Neopixel** | GPIO 27 | Data Line |
-| **DFPlayer RX** | GPIO 16 | Connect to TX of Player |
-| **DFPlayer TX** | GPIO 17 | Connect to RX of Player |
-| **SDA (I2C)** | GPIO 21 | For future expansion |
-| **SCL (I2C)** | GPIO 22 | For future expansion |
+| **RC Throttle** | GPIO 33 | Optional Physical RC |
+| **RC Steering** | GPIO 32 | Optional Physical RC |
+| **RC Spin**     | GPIO 35 | Optional Physical RC |
 
-## 🚀 Getting Started
-1.  Open this folder in VS Code.
-2.  Check `src/config.h` (Ensure no "42" traps!).
-3.  Upload to your NodeMCU-32S.
+## 🚀 Prototype Quick Start
+1.  **Open Folder**: Open `squad-bots` in VS Code / PlatformIO.
+2.  **Upload**: Flash to NodeMCU-32S.
+3.  **Verify Safety**:
+    *   [ ] Connect iPad and Drive.
+    *   [ ] Turn off WiFi on iPad.
+    *   [ ] **Verify droid stops in <0.5s**.

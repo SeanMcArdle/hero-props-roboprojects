@@ -9,6 +9,7 @@ volatile int webDomeY = 100;
 volatile int webDriveX = 0;
 volatile int webDriveY = 0;
 volatile int webCommandId = 0;
+volatile unsigned long lastWebPacket = 0;
 
 // The HTML (Embedded for simplicity - No SPIFFS required)
 const char* html_page = R"rawliteral(
@@ -186,12 +187,21 @@ const char* html_page = R"rawliteral(
 AsyncWebSocket ws("/ws");
 
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_DATA) {
+    if (type == WS_EVT_DISCONNECT) {
+        // Immediate stop on disconnect
+        webDriveX = 0;
+        webDriveY = 0;
+    } else if (type == WS_EVT_DATA) {
         AwsFrameInfo *info = (AwsFrameInfo*)arg;
         if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
             data[len] = 0;
             String msg = (char*)data;
             
+            // Heartbeat: Reset watchdog timer on valid data
+            if (msg.startsWith("D:") || msg.startsWith("J:") || msg.startsWith("C:")) {
+                lastWebPacket = millis();
+            }
+
             // Parse "J:150,150" or "C:1"
             if (msg.startsWith("J:")) {
                 int comma = msg.indexOf(',');
