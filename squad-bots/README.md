@@ -1,6 +1,6 @@
 # Squad Bots: Omni-Node V1 ("Cosmic Cube")
 
-**Status**: 🟢 **RC3 - Physics & Stability** (Jan 6, 2026)  
+**Status**: 🟢 **RC3.3 - The Ghost Buster** (Jan 6, 2026)  
 **Hardware**: NodeMCU-32S (ESP32)  
 **Role**: Integrated Droid Controller & Web Server
 
@@ -11,10 +11,16 @@ The **Omni-Node** architecture eliminates the need for separate physical remotes
 *   **Core 0 (Web/Comms)**: Handles the AsyncWebServer and WebSocket traffic from the iPad.
 *   **Core 1 (Pilot)**: Runs the motor logic, watchdog, and RC interrupts.
 
-### 🌊 Physics Engine (New in RC3)
+### ⚡ Power & Stability (THE WIFI FIX)
+To solve the 2-week "Ghost Drift" bug caused by RF interference and voltage sag, RC3.3 implements:
+*   **Reduced TX Power**: WiFi transmission reduced to 11dBm (~12mW) to stop RF noise from bleeding into servo lines.
+*   **Lazy Wakeup**: Motors ignore small inputs (<5%) and noise. They only `attach()` when a deliberate command is received.
+*   **Split Wakeup**: Moving the Dome **does not** power up the Drive wheels. This prevents cross-talk drift.
+*   **Auto-Detach**: Servos are electrically disconnected (detached) when the robot is idle. This eliminates 100% of idle jitter/drift.
+
+### 🌊 Physics Engine
 Ported from the "Bakken Workshop" codebase, RC3 introduces:
 *   **Exponential Smoothing**: Drive motors ramp up/down (Factor: 0.15) to protect gearboxes and provide cinematic movement.
-*   **Drift Correction**: Software trim (-3) eliminates phantom dome rotation.
 *   **Heartbeat Keep-Alive**: Web interface sends invalidation packets at 10Hz to prevent watchdog timeouts during smooth scrolling.
 
 ## 🛡️ Safety Features (Red Team Verified)
