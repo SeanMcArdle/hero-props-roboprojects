@@ -1,8 +1,14 @@
 # Squad Bots: Omni-Node V1 ("Cosmic Cube")
 
-**Status**: 🟢 **RC3.3 - The Ghost Buster** (Jan 6, 2026)  
+**Status**: � **Teacher Edition V1** (Jan 7, 2026)  
 **Hardware**: NodeMCU-32S (ESP32)  
 **Role**: Integrated Droid Controller & Web Server
+
+## 🎓 Latest Update: Teacher Edition (Jan 7)
+A special firmware build for classroom demos.
+- **RGBW Teaching Tools:** Big UI sliders for manually mixing Red, Green, Blue, and White channels.
+- **Animations:** Prince Pulse, Party Mode, Rainbow Chase, Scanner Eye.
+- **See [TEACHER_EDITION_NOTES.md](TEACHER_EDITION_NOTES.md) for full details.**
 
 ## 🤖 Architecture: "The Interface is the iPad"
 The **Omni-Node** architecture eliminates the need for separate physical remotes. The ESP32 acts as the Brain, the Router, and the Web Server simultaneously.

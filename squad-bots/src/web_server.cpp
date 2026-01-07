@@ -9,6 +9,10 @@ volatile int webDomeY = 100;
 volatile int webDriveX = 0;
 volatile int webDriveY = 0;
 volatile int webCommandId = 0;
+volatile int webRed = 0;
+volatile int webGreen = 0;
+volatile int webBlue = 0;
+volatile int webWhite = 0;
 volatile unsigned long lastWebPacket = 0;
 
 // The HTML (Embedded for simplicity - No SPIFFS required)
@@ -99,19 +103,52 @@ const char* html_page = R"rawliteral(
         }
         .knob.pilot { background: radial-gradient(circle, var(--prince-purple) 0%, #4B0082 100%); box-shadow: 0 0 10px var(--prince-purple); }
 
+        /* Sliders */
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 10px;
+            background: var(--prince-panel);
+            border-radius: 15px;
+            border: 1px solid var(--prince-purple);
+            margin-bottom: 10px;
+        }
+        .slider-row { display: flex; align-items: center; color: var(--prince-gold); font-size: 10px; }
+        .slider-label { width: 40px; text-align: right; margin-right: 5px; }
+        input[type=range] { 
+            flex: 1; 
+            accent-color: var(--prince-purple); 
+            height: 40px; /* BIGGER TOUCH AREA */
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 35px;
+            width: 35px;
+            border-radius: 50%;
+            background: var(--prince-gold);
+            cursor: pointer;
+            box-shadow: 0 0 10px #000;
+            border: 2px solid white;
+            margin-top: 0px; 
+        }
+
         /* Action Bar */
         .actions { 
             display: grid; 
-            grid-template-columns: 1fr 1fr 1fr 1fr; 
-            gap: 10px; 
-            padding: 10px; 
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr; 
+            gap: 5px; 
+            padding: 5px; 
             background: var(--prince-panel);
             border-radius: 15px;
             border: 1px solid var(--prince-purple);
         }
         .btn { 
-            padding: 15px 5px; 
-            font-size: 12px; 
+            padding: 12px 2px; 
+            font-size: 10px; 
             border: none; 
             border-radius: 8px; 
             font-weight: bold; 
@@ -172,14 +209,32 @@ const char* html_page = R"rawliteral(
             </div>
         </div>
 
+        <div class="slider-container">
+            <div class="slider-row">
+                <div class="slider-label" style="color:red">RED</div>
+                <input type="range" min="0" max="255" value="0" id="slideR" oninput="sendColor()">
+            </div>
+            <div class="slider-row">
+                <div class="slider-label" style="color:green">GRN</div>
+                <input type="range" min="0" max="255" value="0" id="slideG" oninput="sendColor()">
+            </div>
+            <div class="slider-row">
+                <div class="slider-label" style="color:cyan">BLU</div>
+                <input type="range" min="0" max="255" value="0" id="slideB" oninput="sendColor()">
+            </div>
+            <div class="slider-row">
+                <div class="slider-label" style="color:white">WHT</div>
+                <input type="range" min="0" max="255" value="0" id="slideW" oninput="sendColor()">
+            </div>
+        </div>
+
         <div class="actions">
-            <!-- LED TEST CONTROLS -->
-            <button class="btn" style="border-color:red; color:red" onmousedown="sendCmd(1)">RED</button>
-            <button class="btn" style="border-color:green; color:green" onmousedown="sendCmd(2)">GREEN</button>
-            <button class="btn" style="border-color:cyan; color:cyan" onmousedown="sendCmd(3)">BLUE</button>
-            <button class="btn" style="border-color:white; color:white" onmousedown="sendCmd(4)">WHITE</button>
-            <button class="btn" style="border-color:gray; color:gray" onmousedown="sendCmd(5)">OFF</button>
-            <button class="btn" style="background: linear-gradient(90deg, red, orange, yellow, green, blue, violet); color: black;" onmousedown="sendCmd(6)">BOW</button>
+            <!-- LED MODES -->
+            <button class="btn" style="border-color:violet" onmousedown="sendCmd(10)">PULSE</button>
+            <button class="btn" style="border-color:white" onmousedown="sendCmd(11)">PARTY</button>
+            <button class="btn" style="border-color:orange" onmousedown="sendCmd(12)">RAINBOW</button>
+            <button class="btn" style="border-color:cyan" onmousedown="sendCmd(13)">SCANNER</button>
+            <button class="btn" style="border-color:gray" onmousedown="sendCmd(14)">MANUAL</button>
         </div>
 
         <div class="console-box" id="console">
@@ -299,6 +354,24 @@ const char* html_page = R"rawliteral(
         createJoystick('joyDrive', 'knobDrive', 'D', true);
         createJoystick('joyDome',  'knobDome',  'J', false);
 
+        // Color Mixer Throttler
+        let lastColorSend = 0;
+        function sendColor() {
+            let now = Date.now();
+            if (now - lastColorSend < 100) return; // Limit to 10Hz
+            lastColorSend = now;
+
+            let r = document.getElementById('slideR').value;
+            let g = document.getElementById('slideG').value;
+            let b = document.getElementById('slideB').value;
+            let w = document.getElementById('slideW').value;
+
+            if (websocket.readyState === WebSocket.OPEN) {
+                // Send "L:255,0,128,0"
+                websocket.send(`L:${r},${g},${b},${w}`);
+            }
+        }
+
         function sendData(prefix, x, y) {
             if (websocket.readyState === WebSocket.OPEN) {
                 websocket.send(`${prefix}:${x},${y}`);
@@ -343,9 +416,12 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
         if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
             data[len] = 0;
             String msg = (char*)data;
+
+            // Debug Message Parsing
+            Serial.print("Rx: "); Serial.println(msg);
             
             // Heartbeat: Reset watchdog timer on valid data
-            if (msg.startsWith("D:") || msg.startsWith("J:") || msg.startsWith("C:")) {
+            if (msg.startsWith("D:") || msg.startsWith("J:") || msg.startsWith("C:") || msg.startsWith("L:")) {
                 lastWebPacket = millis();
             }
 
@@ -364,6 +440,21 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
                 }
             } else if (msg.startsWith("C:")) {
                 webCommandId = msg.substring(2).toInt();
+            } else if (msg.startsWith("L:")) {
+                // Parse L:R,G,B,W
+                int first = msg.indexOf(',');
+                int second = msg.indexOf(',', first + 1);
+                int third = msg.lastIndexOf(',');
+                
+                if (first > 0 && second > first && third > second) {
+                    webRed = msg.substring(2, first).toInt();
+                    webGreen = msg.substring(first+1, second).toInt();
+                    webBlue = msg.substring(second+1, third).toInt();
+                    webWhite = msg.substring(third+1).toInt();
+                    // Auto-trigger manual mode if user touches slider
+                    webCommandId = 14; 
+                    Serial.printf("🎨 LED MIX: R%d G%d B%d W%d\n", webRed, webGreen, webBlue, webWhite);
+                }
             }
         }
     }

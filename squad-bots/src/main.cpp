@@ -18,6 +18,12 @@ HeroPropsProtocol radio;
 unsigned long lastHeartbeat = 0;
 bool isConnected = false; 
 
+// 🎆 Animation Globals
+int ledMode = 10; // Default: PULSE
+unsigned long lastLedUpdate = 0;
+int aniStep = 0;
+int aniPhase = 0;
+
 Servo leftMotor;
 Servo rightMotor;
 Servo domeServo;
@@ -184,6 +190,101 @@ void setDriveTarget(float throttle, float turn) {
     }
 }
 
+// 🎆 Non-Blocking LED Animator
+// -------------------------------------------------------------------------
+// Modes: 10=Pulse, 11=Party, 12=Rainbow, 13=Scanner, 14=Manual
+void handleLEDs() {
+    unsigned long now = millis();
+    int interval = 30; // Default Frame Rate ~30fps
+
+    if (ledMode == 10) { // 💜 PULSE (Prince Idle)
+        interval = 50;
+        if (now - lastLedUpdate > interval) {
+            float breath = (exp(sin(millis()/2000.0*PI)) - 0.36787944)*108.0;
+            int b = map(breath, 0, 255, 20, 150);
+            strip.fill(strip.Color(b, 0, b, 0)); // Purple-ish
+            strip.show();
+            lastLedUpdate = now;
+        }
+    }
+    else if (ledMode == 11) { // 🎉 PARTY (Go Crazy - More Purple!)
+        interval = 40;
+        if (now - lastLedUpdate > interval) {
+            // Random Sparkles with Heavy Purple Bias
+            int i = random(NUM_LEDS);
+            int dice = random(10); // 0-9
+            
+            if(dice < 6)       strip.setPixelColor(i, strip.Color(255, 0, 255, 0));  // 60% Purple
+            else if(dice < 8)  strip.setPixelColor(i, strip.Color(138, 43, 226, 0)); // 20% Violet
+            else if(dice == 8) strip.setPixelColor(i, strip.Color(255, 255, 255, 255)); // 10% White Flash
+            else               strip.setPixelColor(i, strip.Color(255, 215, 0, 0));  // 10% Gold
+            
+            // Fade all slightly
+            for(int j=0; j<NUM_LEDS; j++) {
+                uint32_t c = strip.getPixelColor(j);
+                uint8_t r = (uint8_t)(c >> 16);
+                uint8_t g = (uint8_t)(c >> 8);
+                uint8_t b = (uint8_t)c;
+                if(r>20) r-=20; else r=0; // Faster fade for punchiness
+                if(g>20) g-=20; else g=0;
+                if(b>20) b-=20; else b=0;
+                strip.setPixelColor(j, r, g, b, 0);
+            }
+            strip.show();
+            lastLedUpdate = now;
+        }
+    }
+    else if (ledMode == 12) { // 🌈 RAINBOW (Confetti Spin)
+        interval = 30;
+        if (now - lastLedUpdate > interval) {
+            aniStep += 2; // Speed up
+            for(int i=0; i<NUM_LEDS; i++) {
+                // "Theater Chase" style Rainbow
+                if ((i + aniStep/4) % 3 == 0) {
+                     int pixelHue = (aniStep*20) + (i * 65536L / NUM_LEDS);
+                     strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+                } else {
+                     strip.setPixelColor(i, 0); // Off for chase effect
+                }
+            }
+            strip.show();
+            lastLedUpdate = now;
+        }
+    }
+    else if (ledMode == 13) { // 🔦 SCANNER (Beefy 5-pixel Eyes)
+        interval = 40; // 
+        if (now - lastLedUpdate > interval) {
+            strip.clear();
+            
+            // Draw 5-pixel wide eyes
+            for(int k=0; k<5; k++) {
+                // Brightness taper for the "tail" of the eye
+                // Center pixel (k=2) is brightest
+                int dim = 0;
+                if(k==0 || k==4) dim = 150; // Dim edges
+                
+                // Eye 1 (Red)
+                int pos1 = (aniStep + k) % NUM_LEDS;
+                strip.setPixelColor(pos1, strip.Color(255-dim, 0, 0, 0));
+
+                // Eye 2 (Blue - Opposite)
+                int pos2 = (aniStep + (NUM_LEDS/2) + k) % NUM_LEDS;
+                strip.setPixelColor(pos2, strip.Color(0, 0, 255-dim, 0));
+            }
+            
+            strip.show();
+            aniStep++;
+            lastLedUpdate = now;
+        }
+    }
+    else if (ledMode == 14) { // 🎛️ MANUAL (Sliders)
+        // No interval, update on change
+        strip.fill(strip.Color(webRed, webGreen, webBlue, webWhite));
+        strip.show();
+    }
+}
+
+// -------------------------------------------------------------------------
 // Wrapper for legacy calls (int -100 to 100)
 void drive(int throttle, int turn) {
     setDriveTarget(throttle / 100.0f, turn / 100.0f);
@@ -226,7 +327,7 @@ void setup() {
 
     // 1b. Init LEDs (Adafruit NeoPixel RGBW)
     strip.begin();
-    strip.setBrightness(50);
+    strip.setBrightness(120); // Brighter for the Teacher Demo!
     strip.fill(strip.Color(0, 0, 255, 0)); // Boot Blue (R,G,B,W)
     strip.show();
 
@@ -244,8 +345,6 @@ void setup() {
     // 3. Init WiFi & Web Server (The Interface)
     WiFi.mode(WIFI_AP);
     // REMOVED: WiFi.setSleep(false); -> Reverting to save power, using Detach logic instead.
-    
-    // Force specific channel for ESP-NOW compatibility
     WiFi.softAP(WIFI_SSID, WIFI_PASS, 1, 0, 4); // Channel 1, Hidden 0, Max 4 clients
     
     // REDUCE TX POWER to 11dBm (approx 12mW) to prevent brownouts and servo interference
@@ -303,22 +402,18 @@ void loop() {
     if (webCommandId > 0) {
         Serial.printf("🔊 Web Cmd: %d\n", webCommandId);
         
-        // LED TEST MODE (RGBW)
-        // Color(R, G, B, W)
-        if (webCommandId == 1) strip.fill(strip.Color(255, 0, 0, 0));   // Red
-        if (webCommandId == 2) strip.fill(strip.Color(0, 255, 0, 0));   // Green
-        if (webCommandId == 3) strip.fill(strip.Color(0, 0, 255, 0));   // Blue
-        if (webCommandId == 4) strip.fill(strip.Color(0, 0, 0, 255));   // True White (W channel)
-        if (webCommandId == 5) strip.fill(strip.Color(0, 0, 0, 0));     // Off
-        if (webCommandId == 6) {
-             // Rainbow cycle equivalent
-             for(int i=0; i<NUM_LEDS; i++) {
-                int pixelHue = i * (65536L / NUM_LEDS);
-                strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
-             }
+        // Mode Select (Teacher Edition)
+        if (webCommandId >= 10 && webCommandId <= 14) {
+            ledMode = webCommandId;
         }
         
-        strip.show();
+        // Legacy Support / Reset
+        if (webCommandId == 5) { // Off
+            ledMode = 14; 
+            webRed = 0; webGreen = 0; webBlue = 0; webWhite = 0;
+            strip.fill(0);
+            strip.show();
+        }
 
         // Reset command
         webCommandId = 0;
@@ -373,6 +468,9 @@ void loop() {
 
     // Apply Physics & Output
     outputPhysics();
+
+    // D. Update LED Animations
+    handleLEDs();
 
     delay(5); // Small breather for Core 1
 }
