@@ -173,10 +173,13 @@ const char* html_page = R"rawliteral(
         </div>
 
         <div class="actions">
-            <button class="btn" onmousedown="sendCmd(1)">HAPPY</button>
-            <button class="btn" onmousedown="sendCmd(2)">SAD</button>
-            <button class="btn" onmousedown="sendCmd(3)">LET'S GO CRAZY</button>
-            <button class="btn" onmousedown="sendCmd(4)">DANCE</button>
+            <!-- LED TEST CONTROLS -->
+            <button class="btn" style="border-color:red; color:red" onmousedown="sendCmd(1)">RED</button>
+            <button class="btn" style="border-color:green; color:green" onmousedown="sendCmd(2)">GREEN</button>
+            <button class="btn" style="border-color:cyan; color:cyan" onmousedown="sendCmd(3)">BLUE</button>
+            <button class="btn" style="border-color:white; color:white" onmousedown="sendCmd(4)">WHITE</button>
+            <button class="btn" style="border-color:gray; color:gray" onmousedown="sendCmd(5)">OFF</button>
+            <button class="btn" style="background: linear-gradient(90deg, red, orange, yellow, green, blue, violet); color: black;" onmousedown="sendCmd(6)">BOW</button>
         </div>
 
         <div class="console-box" id="console">

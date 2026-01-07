@@ -4,14 +4,14 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
-#include <FastLED.h>
+#include <Adafruit_NeoPixel.h>
 #include "web_server.h"
 
 // -------------------------------------------------------------------------
 // 🌍 Globals
 // -------------------------------------------------------------------------
-#define NUM_LEDS 4
-CRGB leds[NUM_LEDS];
+// NOTE: NUM_LEDS and PIN_NEOPIXEL are in config.h
+Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRBW + NEO_KHZ800);
 
 HeroPropsProtocol radio;
 
@@ -224,11 +224,11 @@ void setup() {
     domeServo.attach(PIN_DOME, 500, 2500);
     domeServo.write(90); 
 
-    // 1b. Init LEDs
-    FastLED.addLeds<NEOPIXEL, PIN_NEOPIXEL>(leds, NUM_LEDS);
-    FastLED.setBrightness(50);
-    fill_solid(leds, NUM_LEDS, CRGB::Blue); // Boot Color
-    FastLED.show();
+    // 1b. Init LEDs (Adafruit NeoPixel RGBW)
+    strip.begin();
+    strip.setBrightness(50);
+    strip.fill(strip.Color(0, 0, 255, 0)); // Boot Blue (R,G,B,W)
+    strip.show();
 
     // 2. Attach Interrupts for RC (The Pilot)
     // Use PULLDOWN to prevent floating pin noise if Receiver is off/disconnected
@@ -303,11 +303,22 @@ void loop() {
     if (webCommandId > 0) {
         Serial.printf("🔊 Web Cmd: %d\n", webCommandId);
         
-        if (webCommandId == 1) fill_solid(leds, NUM_LEDS, CRGB::Green);  // Happy
-        if (webCommandId == 2) fill_solid(leds, NUM_LEDS, CRGB::Blue);   // Sad
-        if (webCommandId == 3) fill_solid(leds, NUM_LEDS, CRGB::Red);    // Angry
-        if (webCommandId == 4) fill_solid(leds, NUM_LEDS, CRGB::Yellow); // Dance (Party)
-        FastLED.show();
+        // LED TEST MODE (RGBW)
+        // Color(R, G, B, W)
+        if (webCommandId == 1) strip.fill(strip.Color(255, 0, 0, 0));   // Red
+        if (webCommandId == 2) strip.fill(strip.Color(0, 255, 0, 0));   // Green
+        if (webCommandId == 3) strip.fill(strip.Color(0, 0, 255, 0));   // Blue
+        if (webCommandId == 4) strip.fill(strip.Color(0, 0, 0, 255));   // True White (W channel)
+        if (webCommandId == 5) strip.fill(strip.Color(0, 0, 0, 0));     // Off
+        if (webCommandId == 6) {
+             // Rainbow cycle equivalent
+             for(int i=0; i<NUM_LEDS; i++) {
+                int pixelHue = i * (65536L / NUM_LEDS);
+                strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+             }
+        }
+        
+        strip.show();
 
         // Reset command
         webCommandId = 0;
