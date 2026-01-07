@@ -5,7 +5,7 @@
 // 🤖 Bot Identity
 // -------------------------------------------------------------------------
 #define BOT_ID          1       // Unique ID (1-15). 0 is Commander.
-#define BOT_NAME        "JL-BN" // "Jellybean"
+#define BOT_NAME        "jellybean" // mDNS name: jellybean.local
 
 // -------------------------------------------------------------------------
 // 🔌 Pin Definitions (NodeMCU-32S)
@@ -14,7 +14,14 @@
 #define PIN_MOTOR_LEFT  25
 #define PIN_MOTOR_RIGHT 26
 #define PIN_DOME        13 // Moved to clean pin (was 27)
-#define PIN_NEOPIXEL    27 // Reserved for LEDs
+
+// -------------------------------------------------------------------------
+// 💡 LED Settings (Phase 2+)
+// -------------------------------------------------------------------------
+#define HAS_NEOPIXELS   true
+#define NUM_LEDS        24
+#define PIN_NEOPIXEL    27
+
 // Audio Hardware Removed (Sound plays on iPad)
 
 // -------------------------------------------------------------------------
@@ -39,8 +46,8 @@
 
 // ⚙️ Dome Settings
 #define TRIM_DOME       -3      // Fix Clockwise Drift (Try -5 to 5)
-#define DOME_SPEED_MAX  40      // Slower Spin: Limits range to 90 +/- 40 (50-130)
-#define DOME_SMOOTH     0.1     // Smoothing factor for dome
+#define DOME_SPEED_MAX  90      // MAX RANGE: 90 +/- 90 (0-180)
+#define DOME_SMOOTH     0.015   // 50% Slower than 0.03. Cinema Smooth.
 
 // ⚙️ Drive Settings (Smoothing & Physics)
 #define DRIVE_SMOOTH    0.15    // Lower = Smoother, Higher = Snappier

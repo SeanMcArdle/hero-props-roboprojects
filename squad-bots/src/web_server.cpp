@@ -175,8 +175,8 @@ const char* html_page = R"rawliteral(
         <div class="actions">
             <button class="btn" onmousedown="sendCmd(1)">HAPPY</button>
             <button class="btn" onmousedown="sendCmd(2)">SAD</button>
-            <button class="btn" onmousedown="sendCmd(3)">ANGRY</button>
-            <button class="btn" onmousedown="sendCmd(4)">PARTY</button>
+            <button class="btn" onmousedown="sendCmd(3)">LET'S GO CRAZY</button>
+            <button class="btn" onmousedown="sendCmd(4)">DANCE</button>
         </div>
 
         <div class="console-box" id="console">
