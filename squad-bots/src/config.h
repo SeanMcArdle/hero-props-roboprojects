@@ -4,8 +4,17 @@
 // -------------------------------------------------------------------------
 // 🤖 Bot Identity
 // -------------------------------------------------------------------------
-#define BOT_ID          1       // Unique ID (1-15). 0 is Commander.
-#define BOT_NAME        "jellybean" // mDNS name: jellybean.local
+#ifndef BOT_ID
+  #define BOT_ID          1       // Default ID
+#endif
+
+#ifndef BOT_NAME
+  #define BOT_NAME        "jellybean" 
+#endif
+
+#ifndef WIFI_SSID_NAME
+  #define WIFI_SSID_NAME  "Jellybean-Net"
+#endif
 
 // -------------------------------------------------------------------------
 // 🔌 Pin Definitions (NodeMCU-32S)

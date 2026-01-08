@@ -1,4 +1,5 @@
 #include "web_server.h"
+#include "config.h"
 #include <AsyncTCP.h>
 
 AsyncWebServer server(80);
@@ -191,7 +192,7 @@ const char* html_page = R"rawliteral(
 <body>
     <div class="container">
         <div class="header">
-            <div class="title">JELLYBEAN</div>
+            <div id="displayTitle" class="title">JELLYBEAN</div>
             <div id="status" class="status">CONNECTING...</div>
         </div>
 
@@ -264,16 +265,25 @@ const char* html_page = R"rawliteral(
             websocket = new WebSocket(gateway);
             websocket.onopen = onOpen;
             websocket.onclose = onClose;
+            websocket.onmessage = onMessage;
         }
 
         function onOpen(event) {
             document.getElementById('status').innerText = "CONNECTED";
             document.getElementById('status').classList.add("connected");
+            websocket.send("CFG_REQ");
         }
         function onClose(event) {
             document.getElementById('status').innerText = "DISCONNECTED";
             document.getElementById('status').classList.remove("connected");
             setTimeout(initWebSocket, 2000);
+        }
+
+        function onMessage(event) {
+            let msg = event.data;
+            if (msg.startsWith("CFG:")) {
+                document.getElementById('displayTitle').innerText = msg.substring(4);
+            }
         }
 
         // Joystick Logic Factory
@@ -423,6 +433,12 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
             // Heartbeat: Reset watchdog timer on valid data
             if (msg.startsWith("D:") || msg.startsWith("J:") || msg.startsWith("C:") || msg.startsWith("L:")) {
                 lastWebPacket = millis();
+            }
+
+            if (msg.startsWith("CFG_REQ")) {
+                 String cfg = "CFG:";
+                 cfg += String(BOT_NAME);
+                 client->text(cfg);
             }
 
             // Parse "J:150,150" or "C:1"

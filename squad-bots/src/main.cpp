@@ -11,7 +11,13 @@
 // 🌍 Globals
 // -------------------------------------------------------------------------
 // NOTE: NUM_LEDS and PIN_NEOPIXEL are in config.h
-Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRBW + NEO_KHZ800);
+#ifdef USE_RGB_LEDS
+  // R5-D5 uses Standard RGB Ring
+  Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+#else
+  // Jellybean uses RGBW Ring
+  Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRBW + NEO_KHZ800); 
+#endif
 
 HeroPropsProtocol radio;
 
@@ -309,8 +315,10 @@ void setup() {
     // 0. Safety Delay & Serial Init
     delay(2000); // Give power time to stabilize and USB to enumerate
     Serial.begin(115200);
-    Serial.println("\n\n🤖 OMNI-NODE V1 (SquadBot) Booting...");
 
+    // Dynamic Title
+    Serial.printf("\n\n🤖 OMNI-NODE V1 (%s) Booting...\n", BOT_NAME);
+    
     // 1. Init Hardware
     ESP32PWM::allocateTimer(0);
     ESP32PWM::allocateTimer(1);
@@ -345,13 +353,13 @@ void setup() {
     // 3. Init WiFi & Web Server (The Interface)
     WiFi.mode(WIFI_AP);
     // REMOVED: WiFi.setSleep(false); -> Reverting to save power, using Detach logic instead.
-    WiFi.softAP(WIFI_SSID, WIFI_PASS, 1, 0, 4); // Channel 1, Hidden 0, Max 4 clients
+    WiFi.softAP(WIFI_SSID_NAME, "squadgoals", 1, 0, 4); // Channel 1, Hidden 0, Max 4 clients
     
     // REDUCE TX POWER to 11dBm (approx 12mW) to prevent brownouts and servo interference
     // Default is 19.5dBm (almost 100mW). Must be called AFTER WiFi is started.
     WiFi.setTxPower(WIFI_POWER_11dBm);
 
-    Serial.print("📡 WiFi AP: "); Serial.println(WIFI_SSID);
+    Serial.print("📡 WiFi AP: "); Serial.println(WIFI_SSID_NAME);
     Serial.print("👉 http://"); Serial.println(WiFi.softAPIP());
 
     setupWebServer();
