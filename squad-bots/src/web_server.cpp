@@ -13,7 +13,6 @@ volatile int webCommandId = 0;
 volatile int webRed = 0;
 volatile int webGreen = 0;
 volatile int webBlue = 0;
-volatile int webWhite = 0;
 volatile unsigned long lastWebPacket = 0;
 
 // The HTML (Embedded for simplicity - No SPIFFS required)
@@ -192,7 +191,7 @@ const char* html_page = R"rawliteral(
 <body>
     <div class="container">
         <div class="header">
-            <div id="displayTitle" class="title">JELLYBEAN</div>
+            <div id="displayTitle" class="title">DROID</div>
             <div id="status" class="status">CONNECTING...</div>
         </div>
 
@@ -222,10 +221,6 @@ const char* html_page = R"rawliteral(
             <div class="slider-row">
                 <div class="slider-label" style="color:cyan">BLU</div>
                 <input type="range" min="0" max="255" value="0" id="slideB" oninput="sendColor()">
-            </div>
-            <div class="slider-row">
-                <div class="slider-label" style="color:white">WHT</div>
-                <input type="range" min="0" max="255" value="0" id="slideW" oninput="sendColor()">
             </div>
         </div>
 
@@ -374,11 +369,10 @@ const char* html_page = R"rawliteral(
             let r = document.getElementById('slideR').value;
             let g = document.getElementById('slideG').value;
             let b = document.getElementById('slideB').value;
-            let w = document.getElementById('slideW').value;
 
             if (websocket.readyState === WebSocket.OPEN) {
-                // Send "L:255,0,128,0"
-                websocket.send(`L:${r},${g},${b},${w}`);
+                // Send "L:255,0,128"
+                websocket.send(`L:${r},${g},${b}`);
             }
         }
 
@@ -415,25 +409,47 @@ const char* html_page = R"rawliteral(
 )rawliteral";
 
 AsyncWebSocket ws("/ws");
+uint32_t activeControllerId = 0;
+bool hasActiveController = false;
 
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_DISCONNECT) {
-        // Immediate stop on disconnect
-        webDriveX = 0;
-        webDriveY = 0;
+    if (type == WS_EVT_CONNECT) {
+        if (!hasActiveController) {
+            activeControllerId = client->id();
+            hasActiveController = true;
+            Serial.printf("🌐 WS CONNECT: client=%u (owner)\n", client->id());
+        } else {
+            Serial.printf("⛔ WS REJECT: client=%u (owner=%u)\n", client->id(), activeControllerId);
+            client->text("BUSY");
+            client->close();
+        }
+    } else if (type == WS_EVT_DISCONNECT) {
+        Serial.printf("🌐 WS DISCONNECT: client=%u\n", client->id());
+        if (hasActiveController && client->id() == activeControllerId) {
+            hasActiveController = false;
+            activeControllerId = 0;
+            // Immediate stop if the active controller disconnects.
+            webDriveX = 0;
+            webDriveY = 0;
+        }
     } else if (type == WS_EVT_DATA) {
+        // Ignore packets from non-owner clients.
+        if (hasActiveController && client->id() != activeControllerId) {
+            return;
+        }
+
         AwsFrameInfo *info = (AwsFrameInfo*)arg;
         if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-            data[len] = 0;
-            String msg = (char*)data;
+            String msg;
+            msg.reserve(len);
+            for (size_t i = 0; i < len; ++i) {
+                msg += (char)data[i];
+            }
 
             // Debug Message Parsing
             Serial.print("Rx: "); Serial.println(msg);
-            
-            // Heartbeat: Reset watchdog timer on valid data
-            if (msg.startsWith("D:") || msg.startsWith("J:") || msg.startsWith("C:") || msg.startsWith("L:")) {
-                lastWebPacket = millis();
-            }
+
+            bool validControlPacket = false;
 
             if (msg.startsWith("CFG_REQ")) {
                  String cfg = "CFG:";
@@ -445,32 +461,39 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
             if (msg.startsWith("D:")) {
                 int comma = msg.indexOf(',');
                 if (comma > 0) {
-                    webDriveX = msg.substring(2, comma).toInt(); // Throttle
-                    webDriveY = msg.substring(comma+1).toInt();  // Steering
+                    webDriveX = constrain(msg.substring(2, comma).toInt(), -100, 100); // Turn
+                    webDriveY = constrain(msg.substring(comma+1).toInt(), -100, 100);  // Throttle
+                    validControlPacket = true;
                 }
             } else if (msg.startsWith("J:")) {
                 int comma = msg.indexOf(',');
                 if (comma > 0) {
-                    webDomeX = msg.substring(2, comma).toInt(); // Pan (Spin)
-                    webDomeY = msg.substring(comma+1).toInt();  // Tilt (Not used yet?)
+                    webDomeX = constrain(msg.substring(2, comma).toInt(), 0, 200); // Pan (Spin)
+                    webDomeY = constrain(msg.substring(comma+1).toInt(), 0, 200);  // Tilt (Not used yet?)
+                    validControlPacket = true;
                 }
             } else if (msg.startsWith("C:")) {
-                webCommandId = msg.substring(2).toInt();
+                webCommandId = constrain(msg.substring(2).toInt(), 0, 99);
+                validControlPacket = true;
             } else if (msg.startsWith("L:")) {
-                // Parse L:R,G,B,W
+                // Parse L:R,G,B
                 int first = msg.indexOf(',');
                 int second = msg.indexOf(',', first + 1);
-                int third = msg.lastIndexOf(',');
                 
-                if (first > 0 && second > first && third > second) {
-                    webRed = msg.substring(2, first).toInt();
-                    webGreen = msg.substring(first+1, second).toInt();
-                    webBlue = msg.substring(second+1, third).toInt();
-                    webWhite = msg.substring(third+1).toInt();
+                if (first > 0 && second > first) {
+                    webRed = constrain(msg.substring(2, first).toInt(), 0, 255);
+                    webGreen = constrain(msg.substring(first+1, second).toInt(), 0, 255);
+                    webBlue = constrain(msg.substring(second+1).toInt(), 0, 255);
                     // Auto-trigger manual mode if user touches slider
                     webCommandId = 14; 
-                    Serial.printf("🎨 LED MIX: R%d G%d B%d W%d\n", webRed, webGreen, webBlue, webWhite);
+                    Serial.printf("🎨 LED MIX: R%d G%d B%d\n", webRed, webGreen, webBlue);
+                    validControlPacket = true;
                 }
+            }
+
+            // Heartbeat: Reset watchdog only for successfully parsed control packets.
+            if (validControlPacket) {
+                lastWebPacket = millis();
             }
         }
     }
@@ -485,4 +508,8 @@ void setupWebServer() {
     });
 
     server.begin();
+}
+
+void serviceWebServer() {
+    ws.cleanupClients();
 }
