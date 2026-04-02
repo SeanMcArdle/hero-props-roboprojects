@@ -4,6 +4,7 @@
 #include <ESP32Servo.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <ESPmDNS.h>
 #include <Adafruit_NeoPixel.h>
 #include "web_server.h"
 
@@ -14,6 +15,8 @@
 Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 HeroPropsProtocol radio;
+
+static const char *MDNS_HOST = "l00n";
 
 unsigned long lastHeartbeat = 0;
 bool isConnected = false;
@@ -99,10 +102,10 @@ void IRAM_ATTR isrSpin()
 // Smooth State Variables
 float currentLeft = 0;
 float currentRight = 0;
-float currentDome = 0; // 360 continuous servo: -100 to +100 (speed %)
+float currentDome = 0; // 360 continuous servo: normalized speed (-1.0 to +1.0)
 float targetLeft = 0;
 float targetRight = 0;
-float targetDome = 0; // -100 to +100 (speed %)
+float targetDome = 0; // normalized speed target (-1.0 to +1.0)
 
 // State to track if servos are electrically active
 bool driveActive = true;
@@ -123,7 +126,7 @@ void outputPhysics()
 
     // 2. Smooth the Dome (360 continuous servo)
     currentDome = currentDome * (1.0 - DOME_SMOOTH) + targetDome * DOME_SMOOTH;
-    if (abs(currentDome) < 2.0)
+    if (abs(currentDome) < 0.02)
         currentDome = 0; // Snap to stop if very slow
 
     // ---------------------------------------------------------
@@ -181,7 +184,7 @@ void outputPhysics()
         if (!domeActive)
         {
             // DOME WAKEUP: Strict inputs required
-            bool substantialDomeInput = (abs(targetDome) > 5.0);
+            bool substantialDomeInput = (abs(targetDome) > 0.05);
 
             if (substantialDomeInput)
             {
@@ -215,8 +218,8 @@ void outputPhysics()
     {
         // Dome output: 360° servo uses speed (microseconds)
         // 1500µs = STOP, <1500 = CCW, >1500 = CW
-        // currentDome is -100 to +100 (speed %)
-        int domeUs = 1500 + (int)(currentDome / 100.0 * DOME_SPEED_MAX);
+        // currentDome is normalized speed (-1.0 to +1.0)
+        int domeUs = 1500 + (int)(currentDome * DOME_SPEED_MAX);
         domeUs = constrain(domeUs, 1000, 2000);
         domeServo.writeMicroseconds(domeUs);
     }
@@ -470,6 +473,18 @@ void setup()
         Serial.print("👉 http://");
         Serial.println(WiFi.softAPIP());
 
+        if (MDNS.begin(MDNS_HOST))
+        {
+            MDNS.addService("http", "tcp", 80);
+            Serial.print("🌐 mDNS URL: http://");
+            Serial.print(MDNS_HOST);
+            Serial.println(".local");
+        }
+        else
+        {
+            Serial.println("⚠️ mDNS start failed");
+        }
+
         setupWebServer();
     }
     else
@@ -478,7 +493,7 @@ void setup()
     }
 
     // 4. Init OTA
-    ArduinoOTA.setHostname(BOT_NAME);
+    ArduinoOTA.setHostname(MDNS_HOST);
     ArduinoOTA.setPassword("heroprops");
     // SAFETY: Stop motors before OTA update starts (PWM keeps running during core blocking)
     ArduinoOTA.onStart([]()
@@ -521,13 +536,14 @@ void loop()
     {
         webDriveX = 0;
         webDriveY = 0;
+        webDomeX = 100; // Center dome control on watchdog timeout
     }
 
     // A. Dome Logic (360° Continuous Rotation)
-    // webDomeY is 0-200. Center 100=stop.
+    // webDomeX is 0-200. Center 100=stop.
     // Map to -100 to +100 (percentage of max speed)
     // 0-100: Counterclockwise (negative), 100-200: Clockwise (positive)
-    targetDome = map(webDomeY, 0, 200, -100, 100) / 100.0;
+    targetDome = map(webDomeX, 0, 200, -100, 100) / 100.0;
 
     // B. Handle Web Commands (Sound/Actions)
     if (webCommandId > 0)

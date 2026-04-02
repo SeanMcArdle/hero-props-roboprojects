@@ -16,7 +16,7 @@ volatile int webBlue = 0;
 volatile unsigned long lastWebPacket = 0;
 
 // The HTML (Embedded for simplicity - No SPIFFS required)
-const char* html_page = R"rawliteral(
+const char *html_page = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -24,11 +24,11 @@ const char* html_page = R"rawliteral(
     <title>Jellybean Command</title>
     <style>
         :root {
-            --prince-bg: #150015;
-            --prince-panel: #2a002a;
-            --prince-purple: #9400D3; /* Dark Orchid */
-            --prince-gold: #C0C0C0; /* Silver */
-            --text-color: #E6E6FA; /* Lavender */
+            --prince-bg: #160203;
+            --prince-panel: #2b080a;
+            --prince-purple: #c1121f; /* L0-0N Primary Red */
+            --prince-gold: #d9d9d9; /* Silver */
+            --text-color: #ffeaea; /* Soft Rose White */
         }
         body { 
             background-color: var(--prince-bg); 
@@ -75,7 +75,7 @@ const char* html_page = R"rawliteral(
             border: 2px solid var(--prince-purple); 
             border-radius: 50%; 
             touch-action: none;
-            box-shadow: 0 0 15px rgba(148, 0, 211, 0.2);
+            box-shadow: 0 0 15px rgba(193, 18, 31, 0.25);
         }
         
         .label { 
@@ -86,6 +86,51 @@ const char* html_page = R"rawliteral(
             color: var(--prince-gold); 
             font-size: 12px; 
             text-transform: uppercase; 
+        }
+
+        .dome-slider-wrap {
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dome-center-btn {
+            padding: 6px 10px;
+            font-size: 10px;
+            border: 1px solid var(--prince-gold);
+            border-radius: 8px;
+            background: #3a1214;
+            color: var(--prince-gold);
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .dome-slider-label {
+            color: var(--prince-gold);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .dome-slider {
+            width: 160px;
+            accent-color: var(--prince-purple);
+            -webkit-appearance: none;
+            height: 34px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+        }
+
+        .dome-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            width: 28px;
+            border-radius: 50%;
+            background: var(--prince-gold);
+            cursor: pointer;
+            border: 2px solid white;
         }
 
         /* The Stick */
@@ -101,7 +146,7 @@ const char* html_page = R"rawliteral(
             box-shadow: 0 0 10px var(--prince-gold);
             pointer-events: none; /* Let clicks pass to zone */
         }
-        .knob.pilot { background: radial-gradient(circle, var(--prince-purple) 0%, #4B0082 100%); box-shadow: 0 0 10px var(--prince-purple); }
+        .knob.pilot { background: radial-gradient(circle, var(--prince-purple) 0%, #6b0f1a 100%); box-shadow: 0 0 10px var(--prince-purple); }
 
         /* Sliders */
         .slider-container {
@@ -153,7 +198,7 @@ const char* html_page = R"rawliteral(
             border-radius: 8px; 
             font-weight: bold; 
             cursor: pointer; 
-            background: #3a1a3a;
+            background: #3a1214;
             color: var(--prince-gold);
             border: 1px solid var(--prince-gold);
             text-transform: uppercase;
@@ -202,10 +247,11 @@ const char* html_page = R"rawliteral(
                 <div class="label">PILOT</div>
             </div>
 
-            <!-- Right Stick (Dome) -->
-            <div class="zone" id="joyDome">
-                <div class="knob" id="knobDome"></div>
-                <div class="label">PERFORMER</div>
+            <!-- Right Control (Dome Slider) -->
+            <div class="dome-slider-wrap">
+                <div class="dome-slider-label">PERFORMER</div>
+                <input class="dome-slider" type="range" min="0" max="200" value="100" id="domeSlide" oninput="sendDomeSlider()">
+                <button class="dome-center-btn" onmousedown="centerDomeSlider()">CENTER</button>
             </div>
         </div>
 
@@ -226,11 +272,11 @@ const char* html_page = R"rawliteral(
 
         <div class="actions">
             <!-- LED MODES -->
-            <button class="btn" style="border-color:violet" onmousedown="sendCmd(10)">PULSE</button>
-            <button class="btn" style="border-color:white" onmousedown="sendCmd(11)">PARTY</button>
-            <button class="btn" style="border-color:orange" onmousedown="sendCmd(12)">RAINBOW</button>
-            <button class="btn" style="border-color:cyan" onmousedown="sendCmd(13)">SCANNER</button>
-            <button class="btn" style="border-color:gray" onmousedown="sendCmd(14)">MANUAL</button>
+            <button class="btn" style="border-color:#c1121f" onmousedown="sendCmd(10)">PULSE</button>
+            <button class="btn" style="border-color:#e63946" onmousedown="sendCmd(11)">PARTY</button>
+            <button class="btn" style="border-color:#f77f00" onmousedown="sendCmd(12)">RAINBOW</button>
+            <button class="btn" style="border-color:#ff9e00" onmousedown="sendCmd(13)">SCANNER</button>
+            <button class="btn" style="border-color:#9a031e" onmousedown="sendCmd(14)">MANUAL</button>
         </div>
 
         <div class="console-box" id="console">
@@ -355,9 +401,25 @@ const char* html_page = R"rawliteral(
             window.addEventListener('touchend', end);
         }
 
-        // Initialize Joysticks
+        // Initialize Drive Joystick
         createJoystick('joyDrive', 'knobDrive', 'D', true);
-        createJoystick('joyDome',  'knobDome',  'J', false);
+
+        // Dome uses a horizontal slider (left/right) instead of a 2D joystick.
+        function sendDomeSlider() {
+            let x = parseInt(document.getElementById('domeSlide').value, 10);
+            sendData('J', x, 100);
+        }
+
+        function centerDomeSlider() {
+            document.getElementById('domeSlide').value = 100;
+            sendData('J', 100, 100);
+        }
+
+        // Keep dome command alive at 10Hz so continuous spin persists while connected.
+        setInterval(() => {
+            let x = parseInt(document.getElementById('domeSlide').value, 10);
+            sendData('J', x, 100);
+        }, 100);
 
         // Color Mixer Throttler
         let lastColorSend = 0;
@@ -412,104 +474,131 @@ AsyncWebSocket ws("/ws");
 uint32_t activeControllerId = 0;
 bool hasActiveController = false;
 
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_CONNECT) {
-        if (!hasActiveController) {
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+    if (type == WS_EVT_CONNECT)
+    {
+        if (!hasActiveController)
+        {
             activeControllerId = client->id();
             hasActiveController = true;
             Serial.printf("🌐 WS CONNECT: client=%u (owner)\n", client->id());
-        } else {
+        }
+        else
+        {
             Serial.printf("⛔ WS REJECT: client=%u (owner=%u)\n", client->id(), activeControllerId);
             client->text("BUSY");
             client->close();
         }
-    } else if (type == WS_EVT_DISCONNECT) {
+    }
+    else if (type == WS_EVT_DISCONNECT)
+    {
         Serial.printf("🌐 WS DISCONNECT: client=%u\n", client->id());
-        if (hasActiveController && client->id() == activeControllerId) {
+        if (hasActiveController && client->id() == activeControllerId)
+        {
             hasActiveController = false;
             activeControllerId = 0;
             // Immediate stop if the active controller disconnects.
             webDriveX = 0;
             webDriveY = 0;
         }
-    } else if (type == WS_EVT_DATA) {
+    }
+    else if (type == WS_EVT_DATA)
+    {
         // Ignore packets from non-owner clients.
-        if (hasActiveController && client->id() != activeControllerId) {
+        if (hasActiveController && client->id() != activeControllerId)
+        {
             return;
         }
 
-        AwsFrameInfo *info = (AwsFrameInfo*)arg;
-        if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+        AwsFrameInfo *info = (AwsFrameInfo *)arg;
+        if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
+        {
             String msg;
             msg.reserve(len);
-            for (size_t i = 0; i < len; ++i) {
+            for (size_t i = 0; i < len; ++i)
+            {
                 msg += (char)data[i];
             }
 
             // Debug Message Parsing
-            Serial.print("Rx: "); Serial.println(msg);
+            Serial.print("Rx: ");
+            Serial.println(msg);
 
             bool validControlPacket = false;
 
-            if (msg.startsWith("CFG_REQ")) {
-                 String cfg = "CFG:";
-                 cfg += String(BOT_NAME);
-                 client->text(cfg);
+            if (msg.startsWith("CFG_REQ"))
+            {
+                String cfg = "CFG:";
+                cfg += String(BOT_NAME);
+                client->text(cfg);
             }
 
             // Parse "J:150,150" or "C:1"
-            if (msg.startsWith("D:")) {
+            if (msg.startsWith("D:"))
+            {
                 int comma = msg.indexOf(',');
-                if (comma > 0) {
-                    webDriveX = constrain(msg.substring(2, comma).toInt(), -100, 100); // Turn
-                    webDriveY = constrain(msg.substring(comma+1).toInt(), -100, 100);  // Throttle
+                if (comma > 0)
+                {
+                    webDriveX = constrain(msg.substring(2, comma).toInt(), -100, 100);  // Turn
+                    webDriveY = constrain(msg.substring(comma + 1).toInt(), -100, 100); // Throttle
                     validControlPacket = true;
                 }
-            } else if (msg.startsWith("J:")) {
+            }
+            else if (msg.startsWith("J:"))
+            {
                 int comma = msg.indexOf(',');
-                if (comma > 0) {
-                    webDomeX = constrain(msg.substring(2, comma).toInt(), 0, 200); // Pan (Spin)
-                    webDomeY = constrain(msg.substring(comma+1).toInt(), 0, 200);  // Tilt (Not used yet?)
+                if (comma > 0)
+                {
+                    webDomeX = constrain(msg.substring(2, comma).toInt(), 0, 200);  // Pan (Spin)
+                    webDomeY = constrain(msg.substring(comma + 1).toInt(), 0, 200); // Tilt (Not used yet?)
                     validControlPacket = true;
                 }
-            } else if (msg.startsWith("C:")) {
+            }
+            else if (msg.startsWith("C:"))
+            {
                 webCommandId = constrain(msg.substring(2).toInt(), 0, 99);
                 validControlPacket = true;
-            } else if (msg.startsWith("L:")) {
+            }
+            else if (msg.startsWith("L:"))
+            {
                 // Parse L:R,G,B
                 int first = msg.indexOf(',');
                 int second = msg.indexOf(',', first + 1);
-                
-                if (first > 0 && second > first) {
+
+                if (first > 0 && second > first)
+                {
                     webRed = constrain(msg.substring(2, first).toInt(), 0, 255);
-                    webGreen = constrain(msg.substring(first+1, second).toInt(), 0, 255);
-                    webBlue = constrain(msg.substring(second+1).toInt(), 0, 255);
+                    webGreen = constrain(msg.substring(first + 1, second).toInt(), 0, 255);
+                    webBlue = constrain(msg.substring(second + 1).toInt(), 0, 255);
                     // Auto-trigger manual mode if user touches slider
-                    webCommandId = 14; 
+                    webCommandId = 14;
                     Serial.printf("🎨 LED MIX: R%d G%d B%d\n", webRed, webGreen, webBlue);
                     validControlPacket = true;
                 }
             }
 
             // Heartbeat: Reset watchdog only for successfully parsed control packets.
-            if (validControlPacket) {
+            if (validControlPacket)
+            {
                 lastWebPacket = millis();
             }
         }
     }
 }
 
-void setupWebServer() {
+void setupWebServer()
+{
     ws.onEvent(onEvent);
     server.addHandler(&ws);
 
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", html_page);
-    });
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/html", html_page); });
 
     server.begin();
 }
 
-void serviceWebServer() {
+void serviceWebServer()
+{
     ws.cleanupClients();
 }
