@@ -371,6 +371,15 @@ void handleLEDs()
             lastManualBlue = webBlue;
         }
     }
+    else if (ledMode == 15)
+    { // 🖊️ PER-PIXEL (Command Line)
+        if (webPixelIdx >= 0)
+        {
+            strip.setPixelColor(webPixelIdx, strip.Color(webPixelR, webPixelG, webPixelB));
+            strip.show();
+            webPixelIdx = -1;
+        }
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -551,7 +560,7 @@ void loop()
         Serial.printf("🔊 Web Cmd: %d\n", webCommandId);
 
         // Mode Select (Teacher Edition)
-        if (webCommandId >= 10 && webCommandId <= 14)
+        if (webCommandId >= 10 && webCommandId <= 15)
         {
             ledMode = webCommandId;
         }

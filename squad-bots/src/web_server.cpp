@@ -14,6 +14,10 @@ volatile int webRed = 0;
 volatile int webGreen = 0;
 volatile int webBlue = 0;
 volatile unsigned long lastWebPacket = 0;
+volatile int webPixelIdx = -1;
+volatile int webPixelR = 0;
+volatile int webPixelG = 0;
+volatile int webPixelB = 0;
 
 // The HTML (Embedded for simplicity - No SPIFFS required)
 const char *html_page = R"rawliteral(
@@ -230,7 +234,6 @@ const char *html_page = R"rawliteral(
         .log-drive { color: #FF8C00; } /* Dark Orange - legible */
         .log-dome { color: #00BFFF; } /* Deep Sky Blue - legible */
         .log-cmd { color: #32CD32; } /* Lime Green */
-
     </style>
 </head>
 <body>
@@ -470,6 +473,277 @@ const char *html_page = R"rawliteral(
 </html>
 )rawliteral";
 
+// ---- LED Lab Page (/led) ------------------------------------------------
+const char *html_led_page = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>LED Lab</title>
+    <style>
+        body { background:#000; color:#00ff00; font-family:'Courier New',monospace; margin:0; padding:10px; box-sizing:border-box; }
+        .header { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1a1a1a; padding-bottom:8px; margin-bottom:12px; }
+        .title { color:#00ff00; font-size:18px; font-weight:bold; letter-spacing:3px; }
+        .status { font-size:13px; color:#00aa00; font-weight:bold; }
+        .connected { color:#00ff00; text-shadow:0 0 5px #00ff00; }
+        .back { font-size:13px; color:#00aa00; text-decoration:none; font-family:'Courier New',monospace; }
+        /* Preview ring */
+        .strip-label { font-size:12px; color:#00aa00; text-align:center; margin-bottom:4px; letter-spacing:2px; }
+        .ring-container { position:relative; width:200px; height:200px; margin:0 auto 16px auto; }
+        .led-pixel { position:absolute; width:44px; height:44px; border-radius:50%; border:2px solid #333; background:#0a0a0a; transition:background 0.12s, box-shadow 0.12s; }
+        .led-label { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:12px; color:#00aa00; font-weight:bold; }
+        /* Console */
+        .console-box { background:#050505; border:1px solid #333; padding:8px; overflow-y:auto; font-size:15px; margin-bottom:10px; height:180px; }
+        .log-line { margin:3px 0; white-space:pre-wrap; word-break:break-all; }
+        .log-cmd { color:#00ff00; }
+        .log-sys { color:#00bb00; }
+        .log-err { color:#ff5555; }
+        /* Input row */
+        .cmd-line { display:flex; align-items:center; gap:6px; }
+        .cmd-prompt { color:#00ff00; font-weight:bold; font-size:20px; flex-shrink:0; }
+        .cmd-input { flex:1; background:#111; border:2px solid #333; border-radius:6px; color:#00ff00; font-family:'Courier New',monospace; font-size:16px; padding:10px; outline:none; min-width:0; -webkit-appearance:none; }
+        .cmd-input:focus { border-color:#00ff00; }
+        .cmd-go { padding:10px 16px; background:#111; border:2px solid #00ff00; color:#00ff00; font-size:14px; border-radius:6px; font-family:'Courier New',monospace; font-weight:bold; cursor:pointer; flex-shrink:0; -webkit-appearance:none; }
+        .cmd-go:active { background:#00ff00; color:#000; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">&#x1F9EA; LED LAB</div>
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div id="status" class="status">CONNECTING...</div>
+            <a href="/" class="back">&#8592; CONTROL</a>
+        </div>
+    </div>
+    <div class="strip-label">LED RING (0 &mdash; 7)</div>
+    <div class="ring-container" id="ledStrip"></div>
+    <div class="console-box" id="console">
+        <div class="log-line log-sys">LED Lab ready. Type HELP for commands.</div>
+    </div>
+    <div class="cmd-line">
+        <span class="cmd-prompt">&gt;</span>
+        <input type="text" id="cmdInput" class="cmd-input"
+               placeholder="color red  |  pixel 3 blue  |  help"
+               autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false">
+        <button class="cmd-go" onclick="runCmd()">RUN</button>
+    </div>
+    <script>
+        // Build LED ring visualizer
+        var pixelEls = [];
+        (function() {
+            var strip = document.getElementById('ledStrip');
+            var cx = 100, cy = 100, r = 72, size = 44;
+            for (var i = 0; i < 8; i++) {
+                var angle = (i * 45 - 90) * Math.PI / 180;
+                var x = cx + r * Math.cos(angle) - size / 2;
+                var y = cy + r * Math.sin(angle) - size / 2;
+                var d = document.createElement('div');
+                d.className = 'led-pixel';
+                d.style.left = Math.round(x) + 'px';
+                d.style.top  = Math.round(y) + 'px';
+                d.innerHTML = '<span class="led-label">' + i + '</span>';
+                strip.appendChild(d);
+                pixelEls.push(d);
+            }
+        })();
+
+        function setPixelVisual(idx, r, g, b) {
+            if (idx < 0 || idx >= 8) return;
+            var el = pixelEls[idx];
+            el.style.background = 'rgb('+r+','+g+','+b+')';
+            var lum = r*0.299 + g*0.587 + b*0.114;
+            el.style.boxShadow = lum > 15 ? '0 0 12px 3px rgb('+r+','+g+','+b+')' : 'none';
+            el.style.borderColor = lum > 15 ? 'rgb('+r+','+g+','+b+')' : '#222';
+        }
+        function setAllVisual(r, g, b) { for (var i=0;i<8;i++) setPixelVisual(i,r,g,b); }
+
+        // WebSocket
+        var gateway = 'ws://' + window.location.hostname + '/ws';
+        var websocket;
+        function log(msg, cls) {
+            var c = document.getElementById('console');
+            var line = document.createElement('div');
+            line.className = 'log-line ' + (cls||'');
+            line.innerHTML = msg;
+            c.appendChild(line);
+            if (c.childElementCount > 60) c.removeChild(c.firstChild);
+            c.scrollTop = c.scrollHeight;
+        }
+        function initWebSocket() {
+            websocket = new WebSocket(gateway);
+            websocket.onopen = function() {
+                document.getElementById('status').innerText = 'CONNECTED';
+                document.getElementById('status').className = 'status connected';
+                log('// Connected! Type HELP to see commands.', 'log-sys');
+            };
+            websocket.onclose = function() {
+                document.getElementById('status').innerText = 'DISCONNECTED';
+                document.getElementById('status').className = 'status';
+                log('// Disconnected. Reconnecting...', 'log-err');
+                setTimeout(initWebSocket, 2000);
+            };
+            websocket.onmessage = function(e) {
+                if (e.data === 'BUSY') log('// Droid busy \u2014 close the Control page first.', 'log-err');
+            };
+        }
+        function ws_send(msg) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) { websocket.send(msg); return true; }
+            log('// Not connected.', 'log-err'); return false;
+        }
+
+        // ---- Arduino NeoPixel Emulator ----
+
+        // Color constants (like #defines in a real sketch)
+        var COLOR_CONSTS = {
+            'RED':[255,0,0], 'GREEN':[0,200,0], 'BLUE':[0,0,255],
+            'WHITE':[255,255,255], 'YELLOW':[255,200,0], 'PURPLE':[128,0,255],
+            'ORANGE':[255,80,0], 'PINK':[255,20,60], 'CYAN':[0,200,255],
+            'BLACK':[0,0,0], 'GOLD':[255,180,0], 'VIOLET':[148,0,211]
+        };
+
+        // pending = staged buffer; current = what's on the LEDs right now
+        var pending = [], current = [], pendingBright = 255;
+        for (var _i=0; _i<8; _i++) { pending.push([0,0,0]); current.push([0,0,0]); }
+
+        // Evaluate strip.Color(R,G,B) or strip.Color(COLORNAME)
+        function evalColor(expr) {
+            var m = expr.match(/strip\.Color\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/);
+            if (m) {
+                var r=parseInt(m[1]), g=parseInt(m[2]), b=parseInt(m[3]);
+                if (!isNaN(r)&&!isNaN(g)&&!isNaN(b)) return [Math.min(255,r),Math.min(255,g),Math.min(255,b)];
+            }
+            var m2 = expr.match(/strip\.Color\(\s*([A-Za-z]+)\s*\)/);
+            if (m2 && COLOR_CONSTS[m2[1].toUpperCase()]) return COLOR_CONSTS[m2[1].toUpperCase()].slice();
+            return null;
+        }
+
+        function execLine(raw) {
+            var line = raw.trim().replace(/;\s*$/, '').trim();
+            if (!line) return;
+            log(line + ';', 'log-cmd');
+
+            // strip.setPixelColor(idx, strip.Color(...))
+            var m1 = line.match(/^strip\.setPixelColor\(\s*(\d+)\s*,\s*(strip\.Color\([^)]*\))\s*\)$/);
+            if (m1) {
+                var idx = parseInt(m1[1]), color = evalColor(m1[2]);
+                if (idx < 0 || idx > 7) { log('//  Error: index must be 0\u20137', 'log-err'); return; }
+                if (!color) { log('//  Error: bad color \u2014 use strip.Color(255, 0, 0)', 'log-err'); return; }
+                pending[idx] = color;
+                log('//  pixel ' + idx + ' staged \u2192 rgb(' + color + ') \u2014 call strip.show() to send', 'log-sys');
+                return;
+            }
+
+            // strip.fill(strip.Color(...)) or strip.fill(strip.Color(...), first, count)
+            var m2 = line.match(/^strip\.fill\(\s*(strip\.Color\([^)]*\))(?:\s*,\s*(\d+)\s*,\s*(\d+))?\s*\)$/);
+            if (m2) {
+                var color = evalColor(m2[1]);
+                if (!color) { log('//  Error: bad color \u2014 use strip.Color(255, 0, 0)', 'log-err'); return; }
+                var first = m2[2] !== undefined ? parseInt(m2[2]) : 0;
+                var count = m2[3] !== undefined ? parseInt(m2[3]) : (8 - first);
+                for (var i=first; i<first+count && i<8; i++) pending[i] = color.slice();
+                log('//  pixels ' + first + '\u2013' + (Math.min(first+count,8)-1) + ' staged \u2192 rgb(' + color + ') \u2014 call strip.show() to send', 'log-sys');
+                return;
+            }
+
+            // strip.clear()
+            if (/^strip\.clear\(\s*\)$/.test(line)) {
+                for (var i=0; i<8; i++) pending[i] = [0,0,0];
+                log('//  all pixels staged \u2192 OFF \u2014 call strip.show() to send', 'log-sys');
+                return;
+            }
+
+            // strip.setBrightness(val)
+            var mb = line.match(/^strip\.setBrightness\(\s*(\d+)\s*\)$/);
+            if (mb) {
+                pendingBright = Math.min(255, Math.max(0, parseInt(mb[1])));
+                log('//  brightness staged \u2192 ' + pendingBright, 'log-sys');
+                return;
+            }
+
+            // strip.show()
+            if (/^strip\.show\(\s*\)$/.test(line)) {
+                doShow(); return;
+            }
+
+            log('//  Syntax error. Type HELP to see examples.', 'log-err');
+        }
+
+        function doShow() {
+            var scale = pendingBright / 255;
+            var changed = [];
+            for (var i=0; i<8; i++) {
+                if (pending[i][0]!==current[i][0] || pending[i][1]!==current[i][1] || pending[i][2]!==current[i][2]) changed.push(i);
+            }
+            if (changed.length === 0) { log('//  strip.show() \u2014 nothing to update', 'log-sys'); return; }
+
+            // Optimization: all 8 same color -> use L: broadcast
+            var allSame = changed.length === 8;
+            if (allSame) {
+                for (var i=1; i<8; i++) {
+                    if (pending[i][0]!==pending[0][0]||pending[i][1]!==pending[0][1]||pending[i][2]!==pending[0][2]) { allSame=false; break; }
+                }
+            }
+            if (allSame && changed.length === 8) {
+                var r=Math.round(pending[0][0]*scale), g=Math.round(pending[0][1]*scale), b=Math.round(pending[0][2]*scale);
+                if (ws_send('L:'+r+','+g+','+b)) {
+                    setAllVisual(r,g,b);
+                    for (var i=0;i<8;i++) current[i]=pending[i].slice();
+                }
+            } else {
+                for (var i=0; i<changed.length; i++) {
+                    (function(idx, delay) {
+                        setTimeout(function() {
+                            var p=pending[idx];
+                            var r=Math.round(p[0]*scale), g=Math.round(p[1]*scale), b=Math.round(p[2]*scale);
+                            if (ws_send('P:'+idx+','+r+','+g+','+b)) {
+                                setPixelVisual(idx,r,g,b);
+                                current[idx]=pending[idx].slice();
+                            }
+                        }, delay);
+                    })(changed[i], i*50);
+                }
+            }
+            log('//  \u2705 strip.show() \u2014 ' + changed.length + ' pixel' + (changed.length!==1?'s':'') + ' sent to LEDs', 'log-sys');
+        }
+
+        function showHelp() {
+            log('// --- Arduino NeoPixel Commands ---', 'log-sys');
+            log('strip.setPixelColor(0, strip.Color(255, 0, 0));', 'log-cmd');
+            log('//   set pixel 0 red  (pixels 0\u20137)', 'log-sys');
+            log('strip.fill(strip.Color(0, 0, 255));', 'log-cmd');
+            log('//   fill all 8 pixels blue', 'log-sys');
+            log('strip.fill(strip.Color(0, 255, 0), 0, 4);', 'log-cmd');
+            log('//   fill pixels 0\u20133 green  (start, count)', 'log-sys');
+            log('strip.clear();', 'log-cmd');
+            log('//   all pixels off', 'log-sys');
+            log('strip.setBrightness(128);', 'log-cmd');
+            log('//   brightness 0\u2013255', 'log-sys');
+            log('strip.show();', 'log-cmd');
+            log('//   &larr; REQUIRED: pushes all staged changes to LEDs', 'log-sys');
+            log('//', 'log-sys');
+            log('// Color names: RED GREEN BLUE WHITE YELLOW PURPLE', 'log-sys');
+            log('//              ORANGE PINK CYAN GOLD VIOLET BLACK', 'log-sys');
+            log('// strip.Color(RED) also works!', 'log-sys');
+        }
+
+        function runCmd() {
+            var input = document.getElementById('cmdInput');
+            var raw = input.value.trim();
+            if (!raw) return;
+            input.value = '';
+            if (raw.toUpperCase()==='HELP'||raw==='?') { showHelp(); return; }
+            execLine(raw);
+        }
+
+        document.getElementById('cmdInput').addEventListener('keydown', function(e) {
+            if (e.key==='Enter') runCmd();
+        });
+        window.onload = initWebSocket;
+    </script>
+</body>
+</html>
+)rawliteral";
+
 AsyncWebSocket ws("/ws");
 uint32_t activeControllerId = 0;
 bool hasActiveController = false;
@@ -577,6 +851,23 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
                     validControlPacket = true;
                 }
             }
+            else if (msg.startsWith("P:"))
+            {
+                // P:n,R,G,B — set individual pixel
+                int first = msg.indexOf(',');
+                int second = msg.indexOf(',', first + 1);
+                int third = msg.indexOf(',', second + 1);
+                if (first > 0 && second > first && third > second)
+                {
+                    webPixelIdx = constrain(msg.substring(2, first).toInt(), 0, NUM_LEDS - 1);
+                    webPixelR = constrain(msg.substring(first + 1, second).toInt(), 0, 255);
+                    webPixelG = constrain(msg.substring(second + 1, third).toInt(), 0, 255);
+                    webPixelB = constrain(msg.substring(third + 1).toInt(), 0, 255);
+                    webCommandId = 15; // Per-pixel mode
+                    Serial.printf("🖊️ PIXEL %d: R%d G%d B%d\n", webPixelIdx, webPixelR, webPixelG, webPixelB);
+                    validControlPacket = true;
+                }
+            }
 
             // Heartbeat: Reset watchdog only for successfully parsed control packets.
             if (validControlPacket)
@@ -594,6 +885,9 @@ void setupWebServer()
 
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send(200, "text/html", html_page); });
+
+    server.on("/led", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/html", html_led_page); });
 
     server.begin();
 }
