@@ -317,7 +317,7 @@ void AnimatronicEyes::_stepBlink() {
     if (_blinkPhase == 1) {
         // --- Closing phase ---
         // Left: progress = min(step, leftRange) / leftRange
-        float leftProg  = (float)min(_blinkStep, leftRange)  / max(leftRange,  1);
+        float leftProg  = (float)min(_blinkStep, leftRange) / max(leftRange, 1);
         int leftAngle   = leftOpen  + (int)(leftProg  * leftRange);
 
         // Right lags by BLINK_SIDE_STEPS steps
@@ -338,7 +338,7 @@ void AnimatronicEyes::_stepBlink() {
 
     } else if (_blinkPhase == 3) {
         // --- Opening phase (mirror of closing) ---
-        float leftProg  = (float)min(_blinkStep, leftRange)  / max(leftRange,  1);
+        float leftProg  = (float)min(_blinkStep, leftRange) / max(leftRange, 1);
         int leftAngle   = leftOpen  + (int)(leftProg  * leftRange);
 
         int rightStepIdx = max(0, _blinkStep - BLINK_SIDE_STEPS);

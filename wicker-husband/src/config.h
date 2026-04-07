@@ -13,7 +13,8 @@
 #define WIFI_PASS "heroprops"
 #define USE_WIFI_AP 1
 
-// HeroPropsProtocol device ID (must be unique in the group)
+// HeroPropsProtocol device ID (must be unique in the group, range 1–15)
+// ID 5 reserves this node as the "eyes" peripheral; 1=Captain, 2=Lookout, etc.
 #define DEVICE_ID 5
 
 // -------------------------------------------------------------------------

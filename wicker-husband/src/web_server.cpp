@@ -168,7 +168,6 @@ const footerEl = document.getElementById('footerTxt');
 
 let gazeX = 0, gazeY = 0;
 let isDragging = false;
-let sendInterval = null;
 
 // ---- Joystick logic ----
 function getZoneCenter(el) {
@@ -230,7 +229,7 @@ function sendCmd(id) {
 }
 
 // Send gaze at ~20 Hz
-sendInterval = setInterval(sendGaze, 50);
+setInterval(sendGaze, 50);
 updateKnob(0, 0);
 </script>
 </body>
