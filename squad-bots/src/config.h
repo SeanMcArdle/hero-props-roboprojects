@@ -68,8 +68,14 @@
 // -------------------------------------------------------------------------
 // 📡 Network Settings
 // -------------------------------------------------------------------------
+#ifndef WIFI_SSID
 #define WIFI_SSID "L0-0N-Net"
+#endif
+
+#ifndef WIFI_PASS
 #define WIFI_PASS "heroprops"
+#endif
+
 #define USE_WIFI_AP 1 // Set 0 to disable AP/web UI when running ESP-NOW only
 
 #endif

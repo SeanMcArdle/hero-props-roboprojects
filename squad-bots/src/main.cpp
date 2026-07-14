@@ -16,7 +16,9 @@ Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 HeroPropsProtocol radio;
 
+#ifndef MDNS_HOST
 static const char *MDNS_HOST = "l00n";
+#endif
 
 unsigned long lastHeartbeat = 0;
 bool isConnected = false;
@@ -30,6 +32,10 @@ int aniPhase = 0;
 int lastManualRed = -1;
 int lastManualGreen = -1;
 int lastManualBlue = -1;
+int webPixelIdx = -1;
+int webPixelR = 0;
+int webPixelG = 0;
+int webPixelB = 0;
 
 Servo leftMotor;
 Servo rightMotor;

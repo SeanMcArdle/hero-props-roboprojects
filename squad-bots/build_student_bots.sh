@@ -6,16 +6,29 @@
 #   ./build_student_bots.sh B00-B0 /dev/cu.usbserial-0002
 #
 # This script:
-# 1. Patches config.h & main.cpp with custom bot names
-# 2. Builds firmware
-# 3. Flashes to the specified USB port
-# 4. Restores files to git baseline
+# 1. Builds firmware with student-specific values passed as compile-time flags
+# 2. Flashes to the specified USB port
+# 3. Leaves the repo baseline unchanged
 
 set -e
 
 BOT_NAME="${1:-}"
 UPLOAD_PORT="${2:-/dev/cu.usbserial-0001}"
+BOARD_ENV="${3:-l0-0n-devkit}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$REPO_ROOT/src/config.h"
+MAIN_FILE="$REPO_ROOT/src/main.cpp"
+BACKUP_CONFIG=""
+BACKUP_MAIN=""
+
+# Accept either /dev/cu.usbserial-XXXX or cu.usbserial-XXXX for convenience.
+if [ -n "$UPLOAD_PORT" ] && [ "${UPLOAD_PORT#/dev/}" = "$UPLOAD_PORT" ]; then
+    UPLOAD_PORT="/dev/$UPLOAD_PORT"
+fi
+
+sanitize_name() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+//g' | cut -c1-31
+}
 
 # Color codes for output
 RED='\033[0;31m'
@@ -44,30 +57,74 @@ print_error() {
 }
 
 cleanup_and_exit() {
-    print_warning "Restoring config files to baseline..."
+    restore_backups
     cd "$REPO_ROOT"
-    git checkout src/config.h src/main.cpp 2>/dev/null || true
     exit "$1"
 }
+
+create_backups() {
+    BACKUP_CONFIG="$(mktemp)"
+    BACKUP_MAIN="$(mktemp)"
+    cp "$CONFIG_FILE" "$BACKUP_CONFIG"
+    cp "$MAIN_FILE" "$BACKUP_MAIN"
+}
+
+restore_backups() {
+    if [ -n "$BACKUP_CONFIG" ] && [ -f "$BACKUP_CONFIG" ]; then
+        cp "$BACKUP_CONFIG" "$CONFIG_FILE"
+        rm -f "$BACKUP_CONFIG"
+        BACKUP_CONFIG=""
+    fi
+
+    if [ -n "$BACKUP_MAIN" ] && [ -f "$BACKUP_MAIN" ]; then
+        cp "$BACKUP_MAIN" "$MAIN_FILE"
+        rm -f "$BACKUP_MAIN"
+        BACKUP_MAIN=""
+    fi
+}
+
+patch_runtime_values() {
+    sed -i '' "s|^#define BOT_NAME \".*\"$|#define BOT_NAME \"$BOT_NAME\"|" "$CONFIG_FILE"
+    sed -i '' "s|^#define WIFI_SSID_NAME \".*\"$|#define WIFI_SSID_NAME \"$WIFI_SSID\"|" "$CONFIG_FILE"
+    sed -i '' "s|^#define WIFI_SSID \".*\"$|#define WIFI_SSID \"$WIFI_SSID\"|" "$CONFIG_FILE"
+    sed -i '' "s|^#define WIFI_PASS \".*\"$|#define WIFI_PASS \"$WIFI_PASS\"|" "$CONFIG_FILE"
+    sed -i '' "s|^static const char \*MDNS_HOST = \".*\";|static const char *MDNS_HOST = \"$MDNS_HOST\";|" "$MAIN_FILE"
+}
+
+free_upload_port() {
+    if ! command -v lsof >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local pids
+    pids=$(lsof -t "$UPLOAD_PORT" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        print_warning "Port $UPLOAD_PORT is busy. Killing stale processes: $pids"
+        kill $pids 2>/dev/null || true
+        sleep 0.5
+    fi
+}
+
+# Ensure cleanup on any failure
+trap 'cleanup_and_exit 1' ERR
 
 # Validation
 if [ -z "$BOT_NAME" ]; then
     print_header "L0-0N Student Bot Build Helper"
     echo ""
-    echo "Usage: ./build_student_bots.sh <BOT_NAME> [UPLOAD_PORT]"
+    echo "Usage: ./build_student_bots.sh <STUDENT_NAME> [UPLOAD_PORT] [BOARD_ENV]"
     echo ""
     echo "Examples:"
-    echo "  ./build_student_bots.sh CRUST-P0"
-    echo "  ./build_student_bots.sh B00-B0 /dev/cu.usbserial-0002"
-    echo "  ./build_student_bots.sh Sp0tty-M33P /dev/cu.usbserial-0003"
+    echo "  ./build_student_bots.sh LucasJ"
+    echo "  ./build_student_bots.sh LucasD /dev/cu.usbserial-0002"
+    echo "  ./build_student_bots.sh Mia /dev/cu.usbserial-0003 l0-0n-devkit"
     echo ""
-    echo "Available student bots:"
-    echo "  - CRUST-P0"
-    echo "  - B00-B0"
-    echo "  - Sp0tty-M33P"
-    echo "  - RJ-BD3"
-    echo "  - KP-71"
-    echo "  - LU-CA"
+    echo "Naming scheme:"
+    echo "  - WiFi SSID: <studentname>"
+    echo "  - mDNS host: <studentname>.local"
+    echo "  - Password: <studentname>123"
+    echo ""
+    echo "Default build env: l0-0n-devkit"
     echo ""
     exit 1
 fi
@@ -81,45 +138,39 @@ if [ ! -e "$UPLOAD_PORT" ]; then
 fi
 
 # Derived values
-WIFI_SSID="${BOT_NAME}-Net"
-MDNS_HOST=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/-//g')
+SANITIZED_NAME=$(sanitize_name "$BOT_NAME")
+WIFI_SSID="$SANITIZED_NAME"
+WIFI_PASS="${SANITIZED_NAME}123"
+if [ ${#WIFI_PASS} -lt 8 ]; then
+    WIFI_PASS="${SANITIZED_NAME}1234"
+fi
+MDNS_HOST="$SANITIZED_NAME"
 
 # Header
 print_header "L0-0N Student Bot: $BOT_NAME"
 echo "WiFi SSID:     $WIFI_SSID"
+echo "Password:      $WIFI_PASS"
 echo "mDNS Hostname: $MDNS_HOST.local"
 echo "Upload Port:   $UPLOAD_PORT"
+echo "Build Env:    $BOARD_ENV"
 echo ""
 
 # Navigate to repo
 cd "$REPO_ROOT"
 
-# Step 1: Patch config files
-print_header "Step 1/3: Patching Configuration Files"
-
-print_warning "Updating src/config.h..."
-# Patch BOT_NAME (inside guards)
-sed -i '' "s|#define BOT_NAME \"L0-0N\"|#define BOT_NAME \"$BOT_NAME\"|g" src/config.h
-# Patch WIFI_SSID_NAME (inside guards)
-sed -i '' "s|#define WIFI_SSID_NAME \"L0-0N-Net\"|#define WIFI_SSID_NAME \"$WIFI_SSID\"|g" src/config.h
-# Patch WIFI_SSID (at bottom of file, fallback for any code that uses it)
-sed -i '' "s|#define WIFI_SSID \"L0-0N-Net\"|#define WIFI_SSID \"$WIFI_SSID\"|g" src/config.h
-print_success "src/config.h updated"
-
-print_warning "Updating src/main.cpp..."
-# Handle both quoted and unquoted MDNS_HOST patterns
-sed -i '' "s|static const char \\*MDNS_HOST = \"l00n\"|static const char *MDNS_HOST = \"$MDNS_HOST\"|g" src/main.cpp
-print_success "src/main.cpp updated"
-
-# Verify patches
-echo ""
+# Step 1: Patch source with student identity (restored automatically after flash)
+print_header "Step 1/3: Preparing Student Identity"
+print_warning "Patching source identity values for this board..."
+create_backups
+patch_runtime_values
+print_success "Identity patch applied"
 echo "Verification:"
-grep -E "^#define BOT_NAME|^#define WIFI_SSID" src/config.h | sort
-grep "MDNS_HOST" src/main.cpp | head -1
+grep -E "^#define BOT_NAME|^#define WIFI_SSID_NAME|^#define WIFI_SSID|^#define WIFI_PASS" "$CONFIG_FILE"
+grep -E "^static const char \*MDNS_HOST" "$MAIN_FILE"
 
 # Step 2: Build
 print_header "Step 2/3: Building Firmware"
-PIO_CMD="~/.platformio/penv/bin/platformio"
+PIO_CMD="~/.platformio/penv/bin/pio"
 
 # Expand ~ in PIO_CMD
 PIO_CMD=$(eval echo "$PIO_CMD")
@@ -129,34 +180,70 @@ if [ ! -f "$PIO_CMD" ]; then
     cleanup_and_exit 1
 fi
 
-echo "Running: $PIO_CMD run -e l0-0n"
-if "$PIO_CMD" run -e l0-0n; then
+echo "Running: $PIO_CMD run -e $BOARD_ENV"
+"$PIO_CMD" run -e "$BOARD_ENV" -t clean
+if "$PIO_CMD" run -e "$BOARD_ENV"; then
     print_success "Build succeeded"
 else
     print_error "Build failed! Check output above."
     cleanup_and_exit 1
 fi
 
+FIRMWARE_ELF="$REPO_ROOT/.pio/build/$BOARD_ENV/firmware.elf"
+if [ ! -f "$FIRMWARE_ELF" ]; then
+    print_error "Expected firmware image not found: $FIRMWARE_ELF"
+    cleanup_and_exit 1
+fi
+
+if ! strings "$FIRMWARE_ELF" | grep -q "$WIFI_SSID"; then
+    print_error "Identity check failed: firmware does not contain expected SSID '$WIFI_SSID'."
+    cleanup_and_exit 1
+fi
+
+print_success "Identity check passed: firmware contains SSID '$WIFI_SSID'."
+
+upload_firmware() {
+    local attempt=1
+    local max_attempts=3
+
+    print_warning "Erasing flash before upload..."
+    if ! "$PIO_CMD" run -e "$BOARD_ENV" -t erase --upload-port "$UPLOAD_PORT"; then
+        print_error "Flash erase failed."
+        return 1
+    fi
+
+    while [ $attempt -le $max_attempts ]; do
+        echo "Running: $PIO_CMD run -e $BOARD_ENV -t upload --upload-port $UPLOAD_PORT (attempt $attempt)"
+        if "$PIO_CMD" run -e "$BOARD_ENV" -t upload --upload-port "$UPLOAD_PORT"; then
+            print_success "Flash completed!"
+            return 0
+        fi
+
+        print_warning "Upload attempt $attempt failed. Retrying..."
+        free_upload_port
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+
+    return 1
+}
+
 # Step 3: Flash
 print_header "Step 3/3: Flashing to Device"
-echo "Running: $PIO_CMD run -e l0-0n -t upload --upload-port $UPLOAD_PORT"
-echo ""
+free_upload_port
 
-if "$PIO_CMD" run -e l0-0n -t upload --upload-port "$UPLOAD_PORT"; then
-    print_success "Flash completed!"
+echo ""
+if upload_firmware; then
+    :
 else
-    print_error "Flash failed! Check USB connection and output above."
+    print_error "Flash failed after multiple attempts. Check USB connection and output above."
     cleanup_and_exit 1
 fi
 
 # Cleanup
 print_header "Cleanup"
-print_warning "Restoring config files to baseline..."
-if git checkout src/config.h src/main.cpp; then
-    print_success "Files restored to git baseline"
-else
-    print_error "Could not restore files—please run: git checkout src/config.h src/main.cpp"
-fi
+restore_backups
+print_success "Original source files restored; repo baseline intact."
 
 # Summary
 print_header "✅ Build & Flash Complete!"
@@ -165,7 +252,8 @@ echo "Next steps for testing:"
 echo "1. Unplug USB cable"
 echo "2. Power cycle the board"
 echo "3. Connect to WiFi SSID: $WIFI_SSID"
-echo "4. Open browser: http://192.168.4.1 or http://$MDNS_HOST.local"
+echo "4. Use password: $WIFI_PASS"
+echo "5. Open browser: http://192.168.4.1 or http://$MDNS_HOST.local"
 echo ""
 echo "For serial debug output, run:"
 echo "  ~/.platformio/penv/bin/pio device monitor -p $UPLOAD_PORT -b 115200"

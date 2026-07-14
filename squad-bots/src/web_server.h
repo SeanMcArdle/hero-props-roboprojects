@@ -19,9 +19,5 @@ extern volatile int webRed;
 extern volatile int webGreen;
 extern volatile int webBlue;
 extern volatile unsigned long lastWebPacket;
-extern volatile int webPixelIdx; // -1 = none, 0+ = pixel to set
-extern volatile int webPixelR;
-extern volatile int webPixelG;
-extern volatile int webPixelB;
 
 #endif
