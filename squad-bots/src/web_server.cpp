@@ -15,6 +15,10 @@ volatile int webGreen = 0;
 volatile int webBlue = 0;
 volatile unsigned long lastWebPacket = 0;
 
+// Rename bridge buffers (see web_server.h for ownership notes)
+char pendingBotName[MAX_BOT_NAME_LEN + 1] = {0};
+volatile bool renameRequested = false;
+
 // The HTML (Embedded for simplicity - No SPIFFS required)
 const char *html_page = R"rawliteral(
 <!DOCTYPE html>
@@ -53,7 +57,9 @@ const char *html_page = R"rawliteral(
         
         /* Header */
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--prince-purple); padding-bottom: 5px; margin-bottom: 10px; }
-        .title { color: var(--prince-gold); font-weight: bold; font-size: 20px; letter-spacing: 2px; }
+        .title-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .title { color: var(--prince-gold); font-weight: bold; font-size: 20px; letter-spacing: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+        .rename-btn { background: none; border: 1px solid var(--prince-purple); color: var(--prince-gold); border-radius: 4px; font-size: 12px; padding: 2px 6px; flex-shrink: 0; }
         .status { font-size: 12px; color: #555; font-weight: bold; }
         .connected { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
         
@@ -235,7 +241,10 @@ const char *html_page = R"rawliteral(
 <body>
     <div class="container">
         <div class="header">
-            <div id="displayTitle" class="title">DROID</div>
+            <div class="title-group">
+                <div id="displayTitle" class="title">DROID</div>
+                <button id="renameBtn" class="rename-btn" onclick="renameBot()">&#9998;</button>
+            </div>
             <div id="status" class="status">CONNECTING...</div>
         </div>
 
@@ -324,6 +333,16 @@ const char *html_page = R"rawliteral(
             if (msg.startsWith("CFG:")) {
                 document.getElementById('displayTitle').innerText = msg.substring(4);
             }
+        }
+
+        function renameBot() {
+            let current = document.getElementById('displayTitle').innerText;
+            let newName = prompt("Enter new Droid Name:", current);
+            if (newName === null) return; // Cancelled
+            newName = newName.trim();
+            if (newName.length === 0) return; // Ignore empty submissions
+            if (newName.length > 20) newName = newName.substring(0, 20);
+            websocket.send("RENAME:" + newName);
         }
 
         // Joystick Logic Factory
@@ -529,8 +548,25 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
             if (msg.startsWith("CFG_REQ"))
             {
                 String cfg = "CFG:";
-                cfg += String(BOT_NAME);
+                cfg += String(activeBotName);
                 client->text(cfg);
+            }
+            else if (msg.startsWith("RENAME:"))
+            {
+                // Only the owning controller can reach this point (checked above).
+                String newName = msg.substring(7);
+                newName.trim();
+                if (newName.length() > 0)
+                {
+                    if (newName.length() > MAX_BOT_NAME_LEN)
+                    {
+                        newName = newName.substring(0, MAX_BOT_NAME_LEN);
+                    }
+                    // Hand off to main.cpp::loop() via fixed buffer + flag.
+                    // main.cpp is the only writer of NVS/Preferences.
+                    newName.toCharArray(pendingBotName, sizeof(pendingBotName));
+                    renameRequested = true;
+                }
             }
 
             // Parse "J:150,150" or "C:1"
@@ -594,6 +630,13 @@ void setupWebServer()
               { request->send(200, "text/html", html_page); });
 
     server.begin();
+}
+
+void broadcastConfig()
+{
+    String cfg = "CFG:";
+    cfg += String(activeBotName);
+    ws.textAll(cfg);
 }
 
 void serviceWebServer()

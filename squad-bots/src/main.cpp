@@ -6,6 +6,7 @@
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
 #include <Adafruit_NeoPixel.h>
+#include <Preferences.h>
 #include "web_server.h"
 
 // -------------------------------------------------------------------------
@@ -15,6 +16,10 @@
 Adafruit_NeoPixel strip(NUM_LEDS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 HeroPropsProtocol radio;
+
+// Persistent droid name (loaded from NVS in setup(), falls back to BOT_NAME)
+Preferences preferences;
+char activeBotName[MAX_BOT_NAME_LEN + 1];
 
 #ifndef MDNS_HOST
 static const char *MDNS_HOST = "l00n";
@@ -437,8 +442,21 @@ void setup()
     delay(2000); // Give power time to stabilize and USB to enumerate
     Serial.begin(115200);
 
+    // Load persistent droid name (falls back to compiled-in BOT_NAME on first boot)
+    preferences.begin("botcfg", false);
+    String storedName = preferences.getString("name", "");
+    if (storedName.length() > 0)
+    {
+        storedName.toCharArray(activeBotName, sizeof(activeBotName));
+    }
+    else
+    {
+        strncpy(activeBotName, BOT_NAME, sizeof(activeBotName) - 1);
+        activeBotName[sizeof(activeBotName) - 1] = '\0';
+    }
+
     // Dynamic Title
-    Serial.printf("\n\n🤖 OMNI-NODE V1 (%s) Booting...\n", BOT_NAME);
+    Serial.printf("\n\n🤖 OMNI-NODE V1 (%s) Booting...\n", activeBotName);
     Serial.printf("🔧 Hardware Mapping: L=%d, R=%d, Dome=%d, NeoPixel=%d\n",
                   PIN_MOTOR_LEFT, PIN_MOTOR_RIGHT, PIN_DOME, PIN_NEOPIXEL);
 
@@ -541,6 +559,21 @@ void loop()
     {
         serviceWebServer();
         lastWsCleanup = millis();
+    }
+
+    // Apply any pending rename from the web UI. This is the ONLY place
+    // Preferences/NVS gets written (never from the async WS callback).
+    if (renameRequested)
+    {
+        renameRequested = false;
+        if (strncmp(activeBotName, pendingBotName, sizeof(activeBotName)) != 0)
+        {
+            strncpy(activeBotName, pendingBotName, sizeof(activeBotName) - 1);
+            activeBotName[sizeof(activeBotName) - 1] = '\0';
+            preferences.putString("name", activeBotName);
+            broadcastConfig();
+            Serial.printf("✏️  Droid renamed to: %s\n", activeBotName);
+        }
     }
 
     // ----------------------

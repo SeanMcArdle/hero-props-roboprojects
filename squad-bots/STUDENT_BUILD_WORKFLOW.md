@@ -54,6 +54,19 @@ Safety features now built into this script:
 - Writes an audit log (`flash_audit_YYYYMMDD-HHMMSS.log`) with per-board outcomes
 - Supports resume with `--start-at <row>` if the session is interrupted
 
+### Editable, Persistent Droid Name (Web UI)
+
+Kids can tap the pencil (✎) icon next to the title on the iPad UI to rename their droid.
+The name is saved to the ESP32's onboard flash (NVS via `Preferences`), so it survives
+normal power cycles.
+
+**Important gotcha**: `build_student_bots.sh` runs a full flash **erase** before every
+upload (`pio ... -t erase`). A full erase wipes NVS along with everything else, so
+**re-flashing a board (bug fix, next session, restore-baseline) will reset the custom
+name back to whatever is compiled into `config.h`/passed at build time.** This is
+expected behavior, not a bug — just don't be surprised if a rename doesn't survive
+a re-flash.
+
 ### Quick Build Script
 
 Run this in `/squad-bots/` directory:
