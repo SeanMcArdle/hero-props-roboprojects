@@ -149,16 +149,19 @@ wait_for_port() {
     fi
 
     if [ "${#existing[@]}" -gt 1 ]; then
-      echo "Found USB serial ports:"
+      # NOTE: status/prompt output below MUST go to stderr (>&2), not stdout.
+      # The caller does UPLOAD_PORT="$(wait_for_port)" — anything printed to
+      # stdout here gets captured into UPLOAD_PORT and corrupts the port path.
+      echo "Found USB serial ports:" >&2
       for ports in "${existing[@]}"; do
-        echo "  $ports"
+        echo "  $ports" >&2
       done
       read -r -p "Enter upload port to use: " answer </dev/tty
       echo "$answer"
       return
     fi
 
-    echo "No USB serial board detected yet. Plug in the board now."
+    echo "No USB serial board detected yet. Plug in the board now." >&2
     read -r -p "Press ENTER once the device appears, or enter a port manually: " answer </dev/tty
     if [ -n "$answer" ]; then
       echo "$answer"
