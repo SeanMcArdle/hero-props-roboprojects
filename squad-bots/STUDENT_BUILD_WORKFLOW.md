@@ -32,6 +32,28 @@ For each bot, verify:
 
 ## Phase 2: Firmware Build & Flash
 
+### Recommended: Locked CSV Batch Workflow (No Guessing)
+
+Use the CSV roster as the single source of truth. This prevents accidental extra names or missing boards.
+
+From `/squad-bots/`:
+
+```bash
+# 1) Validate the roster only (no flashing)
+./batch_build_student_bots_csv.sh --csv bakken-campers-summer-2026.csv --expected-count 23 --dry-run
+
+# 2) Run actual flashing only after roster check passes
+./batch_build_student_bots_csv.sh --csv bakken-campers-summer-2026.csv --expected-count 23
+```
+
+Safety features now built into this script:
+
+- Refuses to run if parsed roster count does not match `--expected-count`
+- Refuses to run if duplicate WiFi SSIDs are found
+- Prints full planned roster before flashing
+- Writes an audit log (`flash_audit_YYYYMMDD-HHMMSS.log`) with per-board outcomes
+- Supports resume with `--start-at <row>` if the session is interrupted
+
 ### Quick Build Script
 
 Run this in `/squad-bots/` directory:
