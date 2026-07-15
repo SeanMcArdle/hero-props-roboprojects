@@ -17,19 +17,34 @@
 #endif
 
 // -------------------------------------------------------------------------
-// 🔌 Pin Definitions (NodeMCU-32S)
+// 🔌 Pin Definitions
 // -------------------------------------------------------------------------
-// 🚨 THE 42 TRAP: If you see '42', change it to your actual pin!
+// Configured dynamically by platformio.ini BOARD_VARIANT flags
+#if defined(BOARD_VARIANT_ESP32_DEVKIT)
+#define PIN_MOTOR_LEFT 13
+#define PIN_MOTOR_RIGHT 12
+#define PIN_DOME 14
+#define PIN_NEOPIXEL 2
+#define PIN_RC_THROTTLE 34
+#define PIN_RC_STEERING 35
+#define PIN_RC_SPIN 32
+#elif defined(BOARD_VARIANT_NODEMCU_32S)
 #define PIN_MOTOR_LEFT 25
 #define PIN_MOTOR_RIGHT 26
-#define PIN_DOME 13 // Moved to clean pin (was 27)
+#define PIN_DOME 13
+#define PIN_NEOPIXEL 27
+#define PIN_RC_THROTTLE 33
+#define PIN_RC_STEERING 32
+#define PIN_RC_SPIN 35
+#else
+#error "No valid BOARD_VARIANT_* flag defined in platformio.ini!"
+#endif
 
 // -------------------------------------------------------------------------
 // 💡 LED Settings (Phase 2+)
 // -------------------------------------------------------------------------
 #define HAS_NEOPIXELS true
 #define NUM_LEDS 8
-#define PIN_NEOPIXEL 27
 
 // Audio Hardware Removed (Sound plays on iPad)
 
@@ -39,9 +54,6 @@
 // Camp baseline is Web-only. Enable RC only for projects that wire a receiver.
 #define USE_RC_INPUT false
 
-#define PIN_RC_THROTTLE 33
-#define PIN_RC_STEERING 32
-#define PIN_RC_SPIN 35 // Optional: Left Stick X for pure spin
 #define RC_DEADZONE 15 // Ignore small stick movements
 #define RC_MIN_PULSE 1000
 #define RC_MAX_PULSE 2000

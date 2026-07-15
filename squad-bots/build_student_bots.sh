@@ -84,7 +84,10 @@ restore_backups() {
 }
 
 patch_runtime_values() {
-    sed -i '' "s|^#define BOT_NAME \".*\"$|#define BOT_NAME \"$BOT_NAME\"|" "$CONFIG_FILE"
+    # Escape any double quotes in the student/bot name to prevent breaking the C++ header
+    local SAFE_BOT_NAME="${BOT_NAME//\"/\\\"}"
+
+    sed -i '' "s|^#define BOT_NAME \".*\"$|#define BOT_NAME \"$SAFE_BOT_NAME\"|" "$CONFIG_FILE"
     sed -i '' "s|^#define WIFI_SSID_NAME \".*\"$|#define WIFI_SSID_NAME \"$WIFI_SSID\"|" "$CONFIG_FILE"
     sed -i '' "s|^#define WIFI_SSID \".*\"$|#define WIFI_SSID \"$WIFI_SSID\"|" "$CONFIG_FILE"
     sed -i '' "s|^#define WIFI_PASS \".*\"$|#define WIFI_PASS \"$WIFI_PASS\"|" "$CONFIG_FILE"

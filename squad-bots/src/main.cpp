@@ -439,6 +439,8 @@ void setup()
 
     // Dynamic Title
     Serial.printf("\n\n🤖 OMNI-NODE V1 (%s) Booting...\n", BOT_NAME);
+    Serial.printf("🔧 Hardware Mapping: L=%d, R=%d, Dome=%d, NeoPixel=%d\n",
+                  PIN_MOTOR_LEFT, PIN_MOTOR_RIGHT, PIN_DOME, PIN_NEOPIXEL);
 
     // 1. Init Hardware
     ESP32PWM::allocateTimer(0);
