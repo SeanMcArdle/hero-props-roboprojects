@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haunted Footsteps</title>
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --panel: #14181a;
+            --primary: #33ff88;
+            /* ectoplasm green */
+            --primary-dim: #1a7d47;
+            --text: #eafff2;
+            --text-dim: #7fa895;
+            --border: #26332c;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(ellipse at top, #0e1512 0%, #050605 70%);
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 2px 0;
+            text-transform: uppercase;
+            font-style: italic;
+            letter-spacing: 1px;
+            font-size: 1.8rem;
+            text-shadow: 0 0 12px var(--primary-dim);
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        .status.connected {
+            background: rgba(51, 255, 136, 0.15);
+            color: var(--primary);
+            border: 1px solid var(--primary-dim);
+        }
+
+        .status.disconnected {
+            background: rgba(255, 80, 80, 0.15);
+            color: #ff5050;
+            border: 1px solid #7d1a1a;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            margin: 0 0 14px 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--primary);
+            font-weight: normal;
+        }
+
+        .row {
+            margin-bottom: 14px;
+        }
+
+        .row:last-child {
+            margin-bottom: 0;
+        }
+
+        .row label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        .row label span.val {
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--primary);
+        }
+
+        input[type=color] {
+            width: 100%;
+            height: 42px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: none;
+            cursor: pointer;
+        }
+
+        .feet {
+            display: flex;
+            gap: 16px;
+        }
+
+        .foot {
+            flex: 1;
+        }
+
+        .foot-name {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .foot-name .pressed-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #333;
+            display: inline-block;
+        }
+
+        .foot-name .pressed-dot.on {
+            background: var(--primary);
+            box-shadow: 0 0 8px var(--primary);
+        }
+
+        .bar-track {
+            height: 22px;
+            border-radius: 4px;
+            background: #050705;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--primary-dim), var(--primary));
+            transition: width 0.15s linear;
+        }
+
+        .hint {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Haunted Footsteps</h1>
+        <div class="subtitle">Ethereal Footprint Controller</div>
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div class="card">
+            <h2>Live Telemetry</h2>
+            <div class="feet">
+                <div class="foot">
+                    <div class="foot-name">Toe <span id="toeDot" class="pressed-dot"></span></div>
+                    <div class="bar-track">
+                        <div id="toeBar" class="bar-fill"></div>
+                    </div>
+                </div>
+                <div class="foot">
+                    <div class="foot-name">Heel <span id="heelDot" class="pressed-dot"></span></div>
+                    <div class="bar-track">
+                        <div id="heelBar" class="bar-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Glow Color</h2>
+            <input type="color" id="colorPicker" value="#28ff78">
+        </div>
+
+        <div class="card">
+            <h2>Ghostly Flicker</h2>
+            <div class="row">
+                <label>Flicker Speed <span class="val" id="flickerSpeedVal">60</span></label>
+                <input type="range" id="flickerSpeed" min="0" max="255" value="60">
+            </div>
+            <div class="row">
+                <label>Intensity <span class="val" id="intensityVal">160</span></label>
+                <input type="range" id="intensity" min="0" max="255" value="160">
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Fade Timing</h2>
+            <div class="row">
+                <label>Fade In (press) <span class="val"><span id="fadeInVal">600</span> ms</span></label>
+                <input type="range" id="fadeIn" min="50" max="5000" step="50" value="600">
+            </div>
+            <div class="row">
+                <label>Fade Out (release) <span class="val"><span id="fadeOutVal">3000</span> ms</span></label>
+                <input type="range" id="fadeOut" min="50" max="20000" step="50" value="3000">
+            </div>
+            <div class="hint">Fade-out is always clamped to at least 1.5&times; the fade-in time on the
+                device itself, so the glow can never be configured to snap off faster than it turns on.</div>
+        </div>
+
+        <div class="card">
+            <h2>Firmware</h2>
+            <a href="/update" style="color: var(--primary); font-size: 0.85rem;">Update firmware &rarr;</a>
+            <div class="hint">Opens the OTA upload page (requires the separate firmware-update password, not the WiFi
+                password).</div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let suppressEcho = false;
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+            ws.onopen = () => setStatus(true);
+            ws.onclose = () => { setStatus(false); setTimeout(connect, 1500); };
+            ws.onerror = () => ws.close();
+            ws.onmessage = (evt) => {
+                const msg = JSON.parse(evt.data);
+                if (msg.type === 'settings') applySettings(msg);
+                else if (msg.type === 'telemetry') applyTelemetry(msg);
+            };
+        }
+
+        function setStatus(connected) {
+            const el = document.getElementById('status');
+            el.textContent = connected ? 'Connected' : 'Disconnected';
+            el.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        function applySettings(msg) {
+            suppressEcho = true;
+            document.getElementById('colorPicker').value = msg.colorHex;
+            document.getElementById('flickerSpeed').value = msg.flickerSpeed;
+            document.getElementById('flickerSpeedVal').textContent = msg.flickerSpeed;
+            document.getElementById('intensity').value = msg.intensity;
+            document.getElementById('intensityVal').textContent = msg.intensity;
+            document.getElementById('fadeIn').value = msg.fadeInMs;
+            document.getElementById('fadeInVal').textContent = msg.fadeInMs;
+            document.getElementById('fadeOut').value = msg.fadeOutMs;
+            document.getElementById('fadeOutVal').textContent = msg.fadeOutMs;
+            suppressEcho = false;
+        }
+
+        function applyTelemetry(msg) {
+            document.getElementById('toeDot').classList.toggle('on', msg.toePressed);
+            document.getElementById('heelDot').classList.toggle('on', msg.heelPressed);
+            document.getElementById('toeBar').style.width = (msg.toeEnvelope / 255 * 100) + '%';
+            document.getElementById('heelBar').style.width = (msg.heelEnvelope / 255 * 100) + '%';
+        }
+
+        function sendSettings() {
+            if (suppressEcho || !ws || ws.readyState !== WebSocket.OPEN) return;
+            const payload = {
+                type: 'update_settings',
+                colorHex: document.getElementById('colorPicker').value,
+                flickerSpeed: parseInt(document.getElementById('flickerSpeed').value),
+                intensity: parseInt(document.getElementById('intensity').value),
+                fadeInMs: parseInt(document.getElementById('fadeIn').value),
+                fadeOutMs: parseInt(document.getElementById('fadeOut').value)
+            };
+            ws.send(JSON.stringify(payload));
+        }
+
+        ['colorPicker', 'flickerSpeed', 'intensity', 'fadeIn', 'fadeOut'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                const valEl = document.getElementById(id + 'Val');
+                if (valEl) valEl.textContent = document.getElementById(id).value;
+                sendSettings();
+            });
+        });
+
+        connect();
+    </script>
+</body>
+
+</html>
